@@ -2,12 +2,13 @@
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 -- [[ OWNER WHITELIST SYSTEM ]]
-local OwnerName = "player_new1126" -- Nama akun lu
-local IsOwner = (LocalPlayer.Name == OwnerName)
+local OwnerID = "player_new1126"
+local IsOwner = (LocalPlayer.Name == OwnerID)
 local UserRole = IsOwner and "Owner: Xyara" or "Member"
 local RoleColor = IsOwner and Color3.fromRGB(255, 0, 150) or Color3.fromRGB(255, 255, 255)
 
@@ -17,15 +18,13 @@ getgenv().AimOn = false
 getgenv().HitOn = false
 getgenv().InfoOn = false
 getgenv().FruitOn = false
-
--- PERBEDAAN KEKUATAN (OWNER VS MEMBER)
-getgenv().SpeedVal = IsOwner and 120 or 40 -- Owner jauh lebih kencang
-local MyHitboxSize = IsOwner and 25 or 12   -- Hitbox Owner lebih raksasa
+getgenv().SpeedVal = 20
 
 local PlayerLabels = {}
+local FruitLabels = {}
 local LockedTarget = nil
 
--- [[ UI CONSTRUCTION ]]
+-- [[ UI: GLASS TRANSPARENT ]]
 if game.CoreGui:FindFirstChild("HanaDistanceFix") then game.CoreGui.HanaDistanceFix:Destroy() end
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui); ScreenGui.Name = "HanaDistanceFix"
 
@@ -44,6 +43,7 @@ local Img = Instance.new("ImageLabel", Prof); Img.Size = UDim2.new(0, 55, 0, 55)
 local LRole = Instance.new("TextLabel", Prof); LRole.Size = UDim2.new(0.6, 0, 0.3, 0); LRole.Position = UDim2.new(0.38, 0, 0.2, 0); LRole.Text = UserRole; LRole.TextColor3 = RoleColor; LRole.Font = "SourceSansBold"; LRole.TextSize = 16; LRole.BackgroundTransparency = 1; LRole.TextXAlignment = "Left"
 local LName = Instance.new("TextLabel", Prof); LName.Size = UDim2.new(0.6, 0, 0.3, 0); LName.Position = UDim2.new(0.38, 0, 0.5, 0); LName.Text = "User: "..LocalPlayer.Name; LName.TextColor3 = Color3.new(1,1,1); LName.Font = "SourceSans"; LName.TextSize = 12; LName.BackgroundTransparency = 1; LName.TextXAlignment = "Left"
 
+-- [[ TOGGLE ENGINE ]]
 ToggleBtn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
 
 local function AddToggle(name, var)
@@ -59,12 +59,15 @@ AddToggle("SPEED BOOST", "SpeedOn")
 AddToggle("STICKY AIMLOCK", "AimOn")
 AddToggle("HITBOX PLAYER", "HitOn")
 AddToggle("PLAYER INFO FULL", "InfoOn")
+AddToggle("FRUIT ESP", "FruitOn")
 
--- [[ ENGINE ]]
+-- [[ MAIN ENGINE FIX ]]
 RunService.RenderStepped:Connect(function()
     pcall(function()
+        -- Distance Calculation (Anti-Missing)
         local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         
+        -- Speed Force
         if getgenv().SpeedOn and myRoot then
             local hum = LocalPlayer.Character.Humanoid
             if hum.MoveDirection.Magnitude > 0 then
@@ -72,11 +75,39 @@ RunService.RenderStepped:Connect(function()
             end
         end
 
+        -- Aimlock
+        if getgenv().AimOn then
+            if not LockedTarget or not LockedTarget:FindFirstChild("Humanoid") or LockedTarget.Humanoid.Health <= 0 then
+                local dMin = 1000
+                for _, p in pairs(Players:GetPlayers()) do
+                    if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                        local d = (myRoot.Position - p.Character.HumanoidRootPart.Position).Magnitude
+                        if d < dMin then dMin = d; LockedTarget = p.Character end
+                    end
+                end
+            end
+            if LockedTarget then Camera.CFrame = CFrame.new(Camera.CFrame.Position, LockedTarget.HumanoidRootPart.Position) end
+        end
+
+        -- ESP & Hitbox Logic
         for _, p in pairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                -- HITBOX BERBEDA
-                p.Character.HumanoidRootPart.Size = getgenv().HitOn and Vector3.new(MyHitboxSize, MyHitboxSize, MyHitboxSize) or Vector3.new(2,2,1)
+                p.Character.HumanoidRootPart.Size = getgenv().HitOn and Vector3.new(16,16,16) or Vector3.new(2,2,1)
                 p.Character.HumanoidRootPart.Transparency = getgenv().HitOn and 0.75 or 1
+                
+                if getgenv().InfoOn then
+                    local sPos, onS = Camera:WorldToViewportPoint(p.Character.Head.Position + Vector3.new(0, 13, 0))
+                    if not PlayerLabels[p] then
+                        local l = Instance.new("TextLabel", ScreenGui); l.Size = UDim2.new(0, 160, 0, 80); l.BackgroundTransparency = 1; l.TextColor3 = Color3.new(1,1,1); l.Font = "SourceSansBold"; l.TextSize = 12; PlayerLabels[p] = l
+                    end
+                    PlayerLabels[p].Visible = onS
+                    if onS then
+                        local dist = myRoot and math.floor((myRoot.Position - p.Character.HumanoidRootPart.Position).Magnitude) or 0
+                        local lvl = p:FindFirstChild("Data") and p.Data:FindFirstChild("Level") and p.Data.Level.Value or "???"
+                        PlayerLabels[p].Position = UDim2.new(0, sPos.X - 80, 0, sPos.Y)
+                        PlayerLabels[p].Text = string.format("%s [Lv. %s]\nDist: %dm\nHP: %d", p.Name, lvl, dist, math.floor(p.Character.Humanoid.Health))
+                    end
+                elseif PlayerLabels[p] then PlayerLabels[p].Visible = false end
             end
         end
     end)
