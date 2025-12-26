@@ -1,91 +1,82 @@
--- [[ HANA HUB: XYARA ULTIMATE - FULL VERSION FIXED ]]
+-- [[ HANA HUB: XYARA FIX DISTANCE & WHITELIST ]]
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- [[ OWNER SYSTEM - FIXED TYPO ]]
-local MY_ID = 5691338246 -- ID player_new1126
-local IsOwner = (LocalPlayer.UserId == MY_ID)
+-- [[ OWNER WHITELIST SYSTEM ]]
+local OwnerName = "player_new1126" -- Nama akun lu
+local IsOwner = (LocalPlayer.Name == OwnerName)
 local UserRole = IsOwner and "Owner: Xyara" or "Member"
-local RoleColor = IsOwner and Color3.fromRGB(255, 0, 150) or Color3.new(1, 1, 1)
+local RoleColor = IsOwner and Color3.fromRGB(255, 0, 150) or Color3.fromRGB(255, 255, 255)
 
--- [[ PRIVILEGE SETTINGS ]]
-local MaxSpeed = IsOwner and 150 or 50 
-local MaxHitbox = IsOwner and 25 or 12
-getgenv().SpeedVal = IsOwner and 100 or 30
-
+-- [[ GLOBAL SETTINGS ]]
 getgenv().SpeedOn = false
 getgenv().AimOn = false
 getgenv().HitOn = false
 getgenv().InfoOn = false
 getgenv().FruitOn = false
 
+-- PERBEDAAN KEKUATAN (OWNER VS MEMBER)
+getgenv().SpeedVal = IsOwner and 120 or 40 -- Owner jauh lebih kencang
+local MyHitboxSize = IsOwner and 25 or 12   -- Hitbox Owner lebih raksasa
+
 local PlayerLabels = {}
+local LockedTarget = nil
 
 -- [[ UI CONSTRUCTION ]]
-if game.CoreGui:FindFirstChild("HanaUltimate") then game.CoreGui.HanaUltimate:Destroy() end
-local ScreenGui = Instance.new("ScreenGui", game.CoreGui); ScreenGui.Name = "HanaUltimate"
+if game.CoreGui:FindFirstChild("HanaDistanceFix") then game.CoreGui.HanaDistanceFix:Destroy() end
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui); ScreenGui.Name = "HanaDistanceFix"
 
--- Tombol Toggle H
-local TogBtn = Instance.new("TextButton", ScreenGui)
-TogBtn.Size = UDim2.new(0, 45, 0, 45); TogBtn.Position = UDim2.new(0.02, 0, 0.45, 0)
-TogBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 150); TogBtn.Text = "H"; TogBtn.TextColor3 = Color3.new(1,1,1)
-Instance.new("UICorner", TogBtn).CornerRadius = UDim.new(1,0)
+local ToggleBtn = Instance.new("TextButton", ScreenGui)
+ToggleBtn.Size = UDim2.new(0, 45, 0, 45); ToggleBtn.Position = UDim2.new(0.02, 0, 0.45, 0)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 150); ToggleBtn.BackgroundTransparency = 0.4; ToggleBtn.Text = "H"; ToggleBtn.TextColor3 = Color3.new(1,1,1); Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1,0)
 
-local Main = Instance.new("ScrollingFrame", ScreenGui)
-Main.Size = UDim2.new(0, 240, 0, 400); Main.Position = UDim2.new(0.5, -120, 0.5, -200)
-Main.BackgroundColor3 = Color3.new(0,0,0); Main.BackgroundTransparency = 0.4; Main.Visible = false; Main.ScrollBarThickness = 0
-Instance.new("UICorner", Main)
-local Layout = Instance.new("UIListLayout", Main); Layout.Padding = UDim.new(0, 8); Layout.HorizontalAlignment = "Center"
-Instance.new("UIPadding", Main).PaddingTop = UDim.new(0, 10)
+local MainFrame = Instance.new("ScrollingFrame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 240, 0, 420); MainFrame.Position = UDim2.new(0.5, -120, 0.5, -210)
+MainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0); MainFrame.BackgroundTransparency = 0.6; MainFrame.Visible = false; MainFrame.ScrollBarThickness = 0; Instance.new("UICorner", MainFrame)
+Instance.new("UIListLayout", MainFrame).Padding = UDim.new(0, 8); Instance.new("UIPadding", MainFrame).PaddingTop = UDim.new(0, 5)
 
-TogBtn.MouseButton1Click:Connect(function() Main.Visible = not Main.Visible end)
+-- [[ PROFILE SECTION ]]
+local Prof = Instance.new("Frame", MainFrame); Prof.Size = UDim2.new(0.9, 0, 0, 85); Prof.BackgroundTransparency = 0.5; Prof.BackgroundColor3 = Color3.fromRGB(30,30,30); Instance.new("UICorner", Prof)
+local Img = Instance.new("ImageLabel", Prof); Img.Size = UDim2.new(0, 55, 0, 55); Img.Position = UDim2.new(0.05, 0, 0.15, 0); Img.Image = "rbxthumb://type=AvatarHeadShot&id="..LocalPlayer.UserId.."&w=150&h=150"; Instance.new("UICorner", Img).CornerRadius = UDim.new(1,0)
+local LRole = Instance.new("TextLabel", Prof); LRole.Size = UDim2.new(0.6, 0, 0.3, 0); LRole.Position = UDim2.new(0.38, 0, 0.2, 0); LRole.Text = UserRole; LRole.TextColor3 = RoleColor; LRole.Font = "SourceSansBold"; LRole.TextSize = 16; LRole.BackgroundTransparency = 1; LRole.TextXAlignment = "Left"
+local LName = Instance.new("TextLabel", Prof); LName.Size = UDim2.new(0.6, 0, 0.3, 0); LName.Position = UDim2.new(0.38, 0, 0.5, 0); LName.Text = "User: "..LocalPlayer.Name; LName.TextColor3 = Color3.new(1,1,1); LName.Font = "SourceSans"; LName.TextSize = 12; LName.BackgroundTransparency = 1; LName.TextXAlignment = "Left"
 
--- Header Profile
-local Head = Instance.new("Frame", Main); Head.Size = UDim2.new(0.9, 0, 0, 70); Head.BackgroundTransparency = 1
-local Pf = Instance.new("ImageLabel", Head); Pf.Size = UDim2.new(0, 50, 0, 50); Pf.Position = UDim2.new(0.2, -25, 0.1, 0)
-Pf.Image = "rbxthumb://type=AvatarHeadShot&id="..LocalPlayer.UserId.."&w=150&h=150"
-Instance.new("UICorner", Pf).CornerRadius = UDim.new(1,0)
+ToggleBtn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
 
-local RoleTxt = Instance.new("TextLabel", Head); RoleTxt.Size = UDim2.new(0.7, 0, 1, 0); RoleTxt.Position = UDim2.new(0.35, 0, 0, 0)
-RoleTxt.Text = UserRole .. "\nAcc: " .. LocalPlayer.Name
-RoleTxt.TextColor3 = RoleColor; RoleTxt.Font = "SourceSansBold"; RoleTxt.TextSize = 16; RoleTxt.BackgroundTransparency = 1; RoleTxt.TextXAlignment = "Left"
-
--- Toggle Builder
-local function AddTog(name, var)
-    local b = Instance.new("TextButton", Main); b.Size = UDim2.new(0.9, 0, 0, 40); b.Text = name..": OFF"
-    b.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1); b.TextColor3 = Color3.new(1,1,1); Instance.new("UICorner", b)
+local function AddToggle(name, var)
+    local b = Instance.new("TextButton", MainFrame); b.Size = UDim2.new(0.9, 0, 0, 35); b.BackgroundColor3 = Color3.new(0,0,0); b.BackgroundTransparency = 0.6; b.Text = name..": OFF"; b.TextColor3 = Color3.new(1,1,1); b.Font = "SourceSansBold"; Instance.new("UICorner", b)
     b.MouseButton1Click:Connect(function()
         getgenv()[var] = not getgenv()[var]
         b.Text = name..": "..(getgenv()[var] and "ON" or "OFF")
-        b.BackgroundColor3 = getgenv()[var] and Color3.fromRGB(255, 0, 150) or Color3.new(0.1, 0.1, 0.1)
+        b.BackgroundColor3 = getgenv()[var] and Color3.fromRGB(255, 0, 150) or Color3.new(0,0,0)
     end)
 end
 
-AddTog("SPEED BOOST", "SpeedOn")
-AddTog("STICKY AIMLOCK", "AimOn")
-AddTog("HITBOX PLAYER", "HitOn")
-AddTog("PLAYER INFO FULL", "InfoOn")
-AddTog("FRUIT ESP", "FruitOn")
+AddToggle("SPEED BOOST", "SpeedOn")
+AddToggle("STICKY AIMLOCK", "AimOn")
+AddToggle("HITBOX PLAYER", "HitOn")
+AddToggle("PLAYER INFO FULL", "InfoOn")
 
--- ENGINE LOGIC
+-- [[ ENGINE ]]
 RunService.RenderStepped:Connect(function()
     pcall(function()
-        local Root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        -- Speed Logic
-        if getgenv().SpeedOn and Root then
+        local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        
+        if getgenv().SpeedOn and myRoot then
             local hum = LocalPlayer.Character.Humanoid
             if hum.MoveDirection.Magnitude > 0 then
                 LocalPlayer.Character:TranslateBy(hum.MoveDirection * (getgenv().SpeedVal / 18))
             end
         end
-        -- Hitbox & Info Logic
+
         for _, p in pairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                local hrp = p.Character.HumanoidRootPart
-                hrp.Size = getgenv().HitOn and Vector3.new(MaxHitbox, MaxHitbox, MaxHitbox) or Vector3.new(2,2,1)
-                hrp.Transparency = getgenv().HitOn and 0.7 or 1
+                -- HITBOX BERBEDA
+                p.Character.HumanoidRootPart.Size = getgenv().HitOn and Vector3.new(MyHitboxSize, MyHitboxSize, MyHitboxSize) or Vector3.new(2,2,1)
+                p.Character.HumanoidRootPart.Transparency = getgenv().HitOn and 0.75 or 1
             end
         end
     end)
