@@ -1,108 +1,53 @@
--- [[ HANA HUB: XYARA ULTIMATE - FIXED VERSION ]]
+-- [[ HANA HUB: XYARA FIXED ]]
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
 
--- [[ OWNER WHITELIST SYSTEM ]]
-local REAL_OWNER_ID = 5691338246 -- ID player_new1126
+-- LOCK ID OWNER
+local REAL_OWNER_ID = 5691338246 
 local IsOwner = (LocalPlayer.UserId == REAL_OWNER_ID)
-local UserRole = IsOwner and "Owner: Xyara" or "Member"
-local RoleColor = IsOwner and Color3.fromRGB(255, 0, 150) or Color3.new(1, 1, 1)
 
--- [[ PRIVILEGE SETTINGS ]]
--- Fix Logika: Pake IF biar gak error di Delta
-local MaxSpeed = 50
-local MaxHitbox = 12
+-- FIX LOGIKA ROLE (BIAR GAK CRASH)
+local UserRole = "Member"
+local RoleColor = Color3.new(1, 1, 1)
+
 if IsOwner then
-    MaxSpeed = 150
-    MaxHitbox = 25
+    UserRole = "Owner: Xyara"
+    RoleColor = Color3.fromRGB(255, 0, 150)
 end
 
-getgenv().SpeedOn = false
-getgenv().AimOn = false
-getgenv().HitOn = false
-getgenv().InfoOn = false
-getgenv().FruitOn = false
-getgenv().SpeedVal = IsOwner and 100 or 25
+-- UI DIMULAI DI SINI
+if game.CoreGui:FindFirstChild("HanaUltimate") then 
+    game.CoreGui.HanaUltimate:Destroy() 
+end
 
-local PlayerLabels = {}
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+ScreenGui.Name = "HanaUltimate"
 
--- [[ UI CONSTRUCTION ]]
-if game.CoreGui:FindFirstChild("HanaUltimate") then game.CoreGui.HanaUltimate:Destroy() end
-local ScreenGui = Instance.new("ScreenGui", game.CoreGui); ScreenGui.Name = "HanaUltimate"
-
--- Toggle Button (H)
+-- Tombol Buka/Tutup
 local TogBtn = Instance.new("TextButton", ScreenGui)
-TogBtn.Size = UDim2.new(0, 45, 0, 45); TogBtn.Position = UDim2.new(0.02, 0, 0.45, 0)
-TogBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 150); TogBtn.Text = "H"; TogBtn.TextColor3 = Color3.new(1,1,1)
+TogBtn.Size = UDim2.new(0, 45, 0, 45)
+TogBtn.Position = UDim2.new(0.02, 0, 0.45, 0)
+TogBtn.Text = "H"
+TogBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 150)
 Instance.new("UICorner", TogBtn).CornerRadius = UDim.new(1,0)
 
-local Main = Instance.new("ScrollingFrame", ScreenGui)
-Main.Size = UDim2.new(0, 240, 0, 420); Main.Position = UDim2.new(0.5, -120, 0.5, -210)
-Main.BackgroundColor3 = Color3.new(0,0,0); Main.BackgroundTransparency = 0.5; Main.Visible = false; Main.ScrollBarThickness = 0
+local Main = Instance.new("Frame", ScreenGui)
+Main.Size = UDim2.new(0, 220, 0, 300)
+Main.Position = UDim2.new(0.5, -110, 0.5, -150)
+Main.BackgroundColor3 = Color3.new(0,0,0)
+Main.Visible = false
 Instance.new("UICorner", Main)
-local Layout = Instance.new("UIListLayout", Main); Layout.Padding = UDim.new(0, 8); Layout.HorizontalAlignment = "Center"
-Instance.new("UIPadding", Main).PaddingTop = UDim.new(0, 10)
 
-TogBtn.MouseButton1Click:Connect(function() Main.Visible = not Main.Visible end)
-
--- Header Profile (Status Lu Di Sini)
-local Head = Instance.new("Frame", Main); Head.Size = UDim2.new(0.9, 0, 0, 70); Head.BackgroundTransparency = 1
-local Pf = Instance.new("ImageLabel", Head); Pf.Size = UDim2.new(0, 50, 0, 50); Pf.Position = UDim2.new(0, 5, 0.1, 0)
-Pf.Image = "rbxthumb://type=AvatarHeadShot&id="..LocalPlayer.UserId.."&w=150&h=150"
-Instance.new("UICorner", Pf).CornerRadius = UDim.new(1,0)
-
-local RoleTxt = Instance.new("TextLabel", Head); RoleTxt.Size = UDim2.new(0.6, 0, 1, 0); RoleTxt.Position = UDim2.new(0.35, 0, 0, 0)
-RoleTxt.Text = UserRole; RoleTxt.TextColor3 = RoleColor; RoleTxt.Font = "SourceSansBold"; RoleTxt.TextSize = 18; RoleTxt.BackgroundTransparency = 1; RoleTxt.TextXAlignment = "Left"
-
--- Toggle Builder
-local function AddTog(name, var)
-    local b = Instance.new("TextButton", Main); b.Size = UDim2.new(0.9, 0, 0, 40); b.Text = name..": OFF"
-    b.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1); b.TextColor3 = Color3.new(1,1,1); Instance.new("UICorner", b)
-    b.MouseButton1Click:Connect(function()
-        getgenv()[var] = not getgenv()[var]
-        b.Text = name..": "..(getgenv()[var] and "ON" or "OFF")
-        b.BackgroundColor3 = getgenv()[var] and Color3.fromRGB(255, 0, 150) or Color3.new(0.1, 0.1, 0.1)
-        if not getgenv()[var] and var == "InfoOn" then for _,l in pairs(PlayerLabels) do l.Visible = false end end
-    end)
-end
-
-AddTog("SPEED BOOST", "SpeedOn")
-AddTog("STICKY AIMLOCK", "AimOn")
-AddTog("HITBOX PLAYER", "HitOn")
-AddTog("PLAYER INFO FULL", "InfoOn")
-AddTog("FRUIT ESP", "FruitOn")
-
--- MAIN ENGINE
-RunService.RenderStepped:Connect(function()
-    pcall(function()
-        local Root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if getgenv().SpeedOn and Root then
-            local hum = LocalPlayer.Character.Humanoid
-            if hum.MoveDirection.Magnitude > 0 then
-                local s = math.clamp(getgenv().SpeedVal, 20, MaxSpeed)
-                LocalPlayer.Character:TranslateBy(hum.MoveDirection * (s / 18))
-            end
-        end
-        for _, p in pairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                local hrp = p.Character.HumanoidRootPart
-                hrp.Size = getgenv().HitOn and Vector3.new(MaxHitbox, MaxHitbox, MaxHitbox) or Vector3.new(2,2,1)
-                hrp.Transparency = getgenv().HitOn and 0.7 or 1
-                if getgenv().InfoOn then
-                    local sPos, onS = Camera:WorldToViewportPoint(p.Character.Head.Position + Vector3.new(0, 15, 0))
-                    if not PlayerLabels[p] then
-                        PlayerLabels[p] = Instance.new("TextLabel", ScreenGui); PlayerLabels[p].Size = UDim2.new(0,120,0,40); PlayerLabels[p].TextColor3 = Color3.new(1,1,1); PlayerLabels[p].Font = "SourceSansBold"; PlayerLabels[p].TextSize = 12
-                    end
-                    PlayerLabels[p].Visible = onS
-                    if onS then
-                        local d = Root and math.floor((Root.Position - hrp.Position).Magnitude) or 0
-                        PlayerLabels[p].Position = UDim2.new(0, sPos.X-60, 0, sPos.Y)
-                        PlayerLabels[p].Text = string.format("%s\nDist: %dm\nHP: %d", p.Name, d, math.floor(p.Character.Humanoid.Health))
-                    end
-                end
-            end
-        end
-    end)
+TogBtn.MouseButton1Click:Connect(function()
+    Main.Visible = not Main.Visible
 end)
+
+-- Label Status
+local Status = Instance.new("TextLabel", Main)
+Status.Size = UDim2.new(1, 0, 0, 50)
+Status.Text = UserRole
+Status.TextColor3 = RoleColor
+Status.TextSize = 20
+Status.BackgroundTransparency = 1
+
+print("Hana Hub Loaded!")
