@@ -1,4 +1,4 @@
--- [[ HANA HUB: XYARA FIX DISTANCE & WHITELIST ]]
+-- [[ HANA HUB: XYARA FIX DISTANCE & WHITELIST + BLACK FPS ]]
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -27,6 +27,24 @@ local LockedTarget = nil
 -- [[ UI: GLASS TRANSPARENT ]]
 if game.CoreGui:FindFirstChild("HanaDistanceFix") then game.CoreGui.HanaDistanceFix:Destroy() end
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui); ScreenGui.Name = "HanaDistanceFix"
+
+-- [[ TAMBAHAN: BLACK FPS INDICATOR ]] --
+local fpsLabel = Instance.new("TextLabel", ScreenGui)
+fpsLabel.Size = UDim2.new(0, 100, 0, 30); fpsLabel.Position = UDim2.new(0.5, -50, 0.01, 0)
+fpsLabel.BackgroundTransparency = 1; fpsLabel.TextColor3 = Color3.new(0, 0, 0); -- WARNA HITAM
+fpsLabel.Font = "SourceSansBold"; fpsLabel.TextSize = 22; fpsLabel.ZIndex = 1000
+
+task.spawn(function()
+    local lastUpdate = tick(); local count = 0
+    RunService.RenderStepped:Connect(function()
+        count = count + 1
+        if tick() - lastUpdate >= 1 then
+            fpsLabel.Text = "FPS: " .. count
+            count = 0; lastUpdate = tick()
+        end
+    end)
+end)
+---------------------------------------
 
 local ToggleBtn = Instance.new("TextButton", ScreenGui)
 ToggleBtn.Size = UDim2.new(0, 45, 0, 45); ToggleBtn.Position = UDim2.new(0.02, 0, 0.45, 0)
@@ -64,10 +82,8 @@ AddToggle("FRUIT ESP", "FruitOn")
 -- [[ MAIN ENGINE FIX ]]
 RunService.RenderStepped:Connect(function()
     pcall(function()
-        -- Distance Calculation (Anti-Missing)
         local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         
-        -- Speed Force
         if getgenv().SpeedOn and myRoot then
             local hum = LocalPlayer.Character.Humanoid
             if hum.MoveDirection.Magnitude > 0 then
@@ -75,7 +91,6 @@ RunService.RenderStepped:Connect(function()
             end
         end
 
-        -- Aimlock
         if getgenv().AimOn then
             if not LockedTarget or not LockedTarget:FindFirstChild("Humanoid") or LockedTarget.Humanoid.Health <= 0 then
                 local dMin = 1000
@@ -89,7 +104,6 @@ RunService.RenderStepped:Connect(function()
             if LockedTarget then Camera.CFrame = CFrame.new(Camera.CFrame.Position, LockedTarget.HumanoidRootPart.Position) end
         end
 
-        -- ESP & Hitbox Logic
         for _, p in pairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                 p.Character.HumanoidRootPart.Size = getgenv().HitOn and Vector3.new(16,16,16) or Vector3.new(2,2,1)
