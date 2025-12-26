@@ -1,10 +1,10 @@
--- [[ HANA HUB: XYARA ULTIMATE - FIXED ]]
+-- [[ HANA HUB: XYARA ULTIMATE - ALL FEATURES FIXED ]]
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- [[ OWNER WHITELIST SYSTEM ]]
+-- [[ OWNER SYSTEM ]]
 local REAL_OWNER_ID = 5691338246 -- ID lu
 local IsOwner = (LocalPlayer.UserId == REAL_OWNER_ID)
 local UserRole = IsOwner and "Owner: Xyara" or "Member"
@@ -16,8 +16,10 @@ local MaxHitbox = IsOwner and 25 or 12
 getgenv().SpeedVal = IsOwner and 100 or 30
 
 getgenv().SpeedOn = false
+getgenv().AimOn = false
 getgenv().HitOn = false
 getgenv().InfoOn = false
+getgenv().FruitOn = false
 
 local PlayerLabels = {}
 
@@ -25,24 +27,26 @@ local PlayerLabels = {}
 if game.CoreGui:FindFirstChild("HanaUltimate") then game.CoreGui.HanaUltimate:Destroy() end
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui); ScreenGui.Name = "HanaUltimate"
 
--- Tombol Toggle H
+-- Tombol H
 local TogBtn = Instance.new("TextButton", ScreenGui)
 TogBtn.Size = UDim2.new(0, 45, 0, 45); TogBtn.Position = UDim2.new(0.02, 0, 0.45, 0)
 TogBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 150); TogBtn.Text = "H"; TogBtn.TextColor3 = Color3.new(1,1,1)
 Instance.new("UICorner", TogBtn).CornerRadius = UDim.new(1,0)
 
 local Main = Instance.new("ScrollingFrame", ScreenGui)
-Main.Size = UDim2.new(0, 240, 0, 350); Main.Position = UDim2.new(0.5, -120, 0.5, -175)
-Main.BackgroundColor3 = Color3.new(0,0,0); Main.BackgroundTransparency = 0.4; Main.Visible = false
+Main.Size = UDim2.new(0, 240, 0, 400); Main.Position = UDim2.new(0.5, -120, 0.5, -200)
+Main.BackgroundColor3 = Color3.new(0,0,0); Main.BackgroundTransparency = 0.4; Main.Visible = false; Main.ScrollBarThickness = 0
 Instance.new("UICorner", Main)
 local Layout = Instance.new("UIListLayout", Main); Layout.Padding = UDim.new(0, 8); Layout.HorizontalAlignment = "Center"
+Instance.new("UIPadding", Main).PaddingTop = UDim.new(0, 10)
 
 TogBtn.MouseButton1Click:Connect(function() Main.Visible = not Main.Visible end)
 
 -- Header Profile
 local Head = Instance.new("Frame", Main); Head.Size = UDim2.new(0.9, 0, 0, 60); Head.BackgroundTransparency = 1
 local RoleTxt = Instance.new("TextLabel", Head); RoleTxt.Size = UDim2.new(1, 0, 1, 0)
-RoleTxt.Text = UserRole; RoleTxt.TextColor3 = RoleColor; RoleTxt.Font = "SourceSansBold"; RoleTxt.TextSize = 20; RoleTxt.BackgroundTransparency = 1
+RoleTxt.Text = UserRole .. "\nAcc: " .. LocalPlayer.Name
+RoleTxt.TextColor3 = RoleColor; RoleTxt.Font = "SourceSansBold"; RoleTxt.TextSize = 18; RoleTxt.BackgroundTransparency = 1
 
 -- Toggle Builder
 local function AddTog(name, var)
@@ -56,8 +60,10 @@ local function AddTog(name, var)
 end
 
 AddTog("SPEED BOOST", "SpeedOn")
-AddTog("HITBOX PLAYER", "HitOn")
-AddTog("PLAYER INFO", "InfoOn")
+AddTog("STICKY AIMLOCK", "AimOn")
+AddTog("HITBOX NPC/PLAYER", "HitOn")
+AddTog("PLAYER INFO FULL", "InfoOn")
+AddTog("FRUIT ESP", "FruitOn")
 
 -- ENGINE
 RunService.RenderStepped:Connect(function()
@@ -65,13 +71,14 @@ RunService.RenderStepped:Connect(function()
         if getgenv().SpeedOn and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
             local hum = LocalPlayer.Character.Humanoid
             if hum.MoveDirection.Magnitude > 0 then
-                LocalPlayer.Character:TranslateBy(hum.MoveDirection * (getgenv().SpeedVal / 20))
+                LocalPlayer.Character:TranslateBy(hum.MoveDirection * (getgenv().SpeedVal / 18))
             end
         end
         for _, p in pairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                p.Character.HumanoidRootPart.Size = getgenv().HitOn and Vector3.new(MaxHitbox, MaxHitbox, MaxHitbox) or Vector3.new(2,2,1)
-                p.Character.HumanoidRootPart.Transparency = getgenv().HitOn and 0.7 or 1
+                local hrp = p.Character.HumanoidRootPart
+                hrp.Size = getgenv().HitOn and Vector3.new(MaxHitbox, MaxHitbox, MaxHitbox) or Vector3.new(2,2,1)
+                hrp.Transparency = getgenv().HitOn and 0.7 or 1
             end
         end
     end)
