@@ -1,19 +1,13 @@
--- [[ HANA HUB: XYARA FIX DISTANCE & WHITELIST ]]
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UIS = game:GetService("UserInputService")
-local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
-
--- [[ OWNER WHITELIST SYSTEM: LOCKED TO USERID ]]
-local REAL_OWNER_ID = 5691338246 -- Akun player_new1126
+-- [[ OWNER SYSTEM: FIXED ID CHECK ]]
+local REAL_OWNER_ID = 5691338246 
+-- Pastikan baris di bawah ini memanggil nama variabel yang SAMA (REAL_OWNER_ID)
 local IsOwner = (LocalPlayer.UserId == REAL_OWNER_ID)
+
 local UserRole = IsOwner and "Owner: Xyara" or "Member"
-local RoleColor = IsOwner and Color3.fromRGB(255, 0, 150) or Color3.fromRGB(255, 255, 255)
+local RoleColor = IsOwner and Color3.fromRGB(255, 0, 150) or Color3.new(1, 1, 1)
 
 -- [[ PRIVILEGE SETTINGS ]]
--- Owner dapet speed & hitbox jauh lebih besar
+-- Sekarang angka ini bakal aktif cuma buat lu
 local MaxSpeed = IsOwner and 150 or 50 
 local MaxHitbox = IsOwner and 25 or 12
 
