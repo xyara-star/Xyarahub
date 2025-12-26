@@ -1,12 +1,12 @@
--- [[ HANA HUB: XYARA ULTIMATE - ALL FEATURES FIXED ]]
+-- [[ HANA HUB: XYARA ULTIMATE - FULL VERSION FIXED ]]
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- [[ OWNER SYSTEM ]]
-local REAL_OWNER_ID = 5691338246 -- ID lu
-local IsOwner = (LocalPlayer.UserId == REAL_OWNER_ID)
+-- [[ OWNER SYSTEM - FIXED TYPO ]]
+local MY_ID = 5691338246 -- ID player_new1126
+local IsOwner = (LocalPlayer.UserId == MY_ID)
 local UserRole = IsOwner and "Owner: Xyara" or "Member"
 local RoleColor = IsOwner and Color3.fromRGB(255, 0, 150) or Color3.new(1, 1, 1)
 
@@ -27,7 +27,7 @@ local PlayerLabels = {}
 if game.CoreGui:FindFirstChild("HanaUltimate") then game.CoreGui.HanaUltimate:Destroy() end
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui); ScreenGui.Name = "HanaUltimate"
 
--- Tombol H
+-- Tombol Toggle H
 local TogBtn = Instance.new("TextButton", ScreenGui)
 TogBtn.Size = UDim2.new(0, 45, 0, 45); TogBtn.Position = UDim2.new(0.02, 0, 0.45, 0)
 TogBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 150); TogBtn.Text = "H"; TogBtn.TextColor3 = Color3.new(1,1,1)
@@ -43,10 +43,14 @@ Instance.new("UIPadding", Main).PaddingTop = UDim.new(0, 10)
 TogBtn.MouseButton1Click:Connect(function() Main.Visible = not Main.Visible end)
 
 -- Header Profile
-local Head = Instance.new("Frame", Main); Head.Size = UDim2.new(0.9, 0, 0, 60); Head.BackgroundTransparency = 1
-local RoleTxt = Instance.new("TextLabel", Head); RoleTxt.Size = UDim2.new(1, 0, 1, 0)
+local Head = Instance.new("Frame", Main); Head.Size = UDim2.new(0.9, 0, 0, 70); Head.BackgroundTransparency = 1
+local Pf = Instance.new("ImageLabel", Head); Pf.Size = UDim2.new(0, 50, 0, 50); Pf.Position = UDim2.new(0.2, -25, 0.1, 0)
+Pf.Image = "rbxthumb://type=AvatarHeadShot&id="..LocalPlayer.UserId.."&w=150&h=150"
+Instance.new("UICorner", Pf).CornerRadius = UDim.new(1,0)
+
+local RoleTxt = Instance.new("TextLabel", Head); RoleTxt.Size = UDim2.new(0.7, 0, 1, 0); RoleTxt.Position = UDim2.new(0.35, 0, 0, 0)
 RoleTxt.Text = UserRole .. "\nAcc: " .. LocalPlayer.Name
-RoleTxt.TextColor3 = RoleColor; RoleTxt.Font = "SourceSansBold"; RoleTxt.TextSize = 18; RoleTxt.BackgroundTransparency = 1
+RoleTxt.TextColor3 = RoleColor; RoleTxt.Font = "SourceSansBold"; RoleTxt.TextSize = 16; RoleTxt.BackgroundTransparency = 1; RoleTxt.TextXAlignment = "Left"
 
 -- Toggle Builder
 local function AddTog(name, var)
@@ -61,19 +65,22 @@ end
 
 AddTog("SPEED BOOST", "SpeedOn")
 AddTog("STICKY AIMLOCK", "AimOn")
-AddTog("HITBOX NPC/PLAYER", "HitOn")
+AddTog("HITBOX PLAYER", "HitOn")
 AddTog("PLAYER INFO FULL", "InfoOn")
 AddTog("FRUIT ESP", "FruitOn")
 
--- ENGINE
+-- ENGINE LOGIC
 RunService.RenderStepped:Connect(function()
     pcall(function()
-        if getgenv().SpeedOn and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local Root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        -- Speed Logic
+        if getgenv().SpeedOn and Root then
             local hum = LocalPlayer.Character.Humanoid
             if hum.MoveDirection.Magnitude > 0 then
                 LocalPlayer.Character:TranslateBy(hum.MoveDirection * (getgenv().SpeedVal / 18))
             end
         end
+        -- Hitbox & Info Logic
         for _, p in pairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                 local hrp = p.Character.HumanoidRootPart
