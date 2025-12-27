@@ -1,2 +1,126 @@
---[[ v1.0.0 https://wearedevs.net/obfuscator ]] return(function(...)local l={"\069\072\101\122\049\069\071\114\078\054\118\067\089\054\104\061";"\076\085\097\069","\076\107\112\120\055\068\055\089\068\074\084\090\084\075\061\061","\079\089\043\056","\079\086\115\055\103\073\111\080\088\122\107\118\122\086\061\061";"\106\054\098\084\043\111\049\100\051\115\065\061","\081\110\110\106\084\088\073\050";"\105\057\114\118\115\070\051\052\109\108\056\080\054\116\061\061","\085\083\084\056\119\116\106\107\043\104\121\061","\111\104\071\066\089\115\065\061","\079\043\120\117","\068\089\056\112\118\078\050\100\120\054\107\118","\052\069\081\089\047\075\053\051\120\111\087\115\122\052\121\061","\097\054\118\066\097\090\121\061";"\090\099\111\068\066\075\056\119\066\057\080\076","\086\085\086\078";"\065\086\071\050\113\107\073\120\077\066\108\104\084\112\107\072\052\108\082\078";"\108\097\052\073\087\065\099\065\075\078\084\053\067\054\121\054\106\048\116\102\081\102\097\113\047\043\050\108\065\116\061\061";"\089\108\084\119\116\079\104\121\090\087\120\121","\098\107\108\104","\072\100\120\072","\090\085\103\099\098\121\102\061";"\075\106\115\055","\075\120\115\090\055\067\120\066\105\109\101\050\102\073\047\076\114\043\116\061","\108\102\098\111\078\110\071\122\104\104\049\119\088\050\114\115\106\072\121\061";"\100\089\121\066\101\082\052\099\056\086\061\061","\109\084\108\071\101\081\119\079\076\115\121\061";"\112\118\069\073\070\067\117\098\088\075\069\082\050\122\071\051\069\068\047\072\084\100\055\079\089\071\097\052\051\061\061";"\073\090\052\114\097\114\100\099\115\088\052\083\097\114\121\066","\084\065\089\116\069\104\117\098\119\055\068\120\070\122\113\107\118\073\084\050\083\117\053\086";"\049\084\090\109\117\105\047\052\075\072\049\066","\085\104\088\077\106\053\118\113\097\074\114\112\115\077\118\113\078\116\061\061";"\118\080\043\114\051\116\061\061";"\104\113\075\107\098\070\120\052\057\111\107\078";"\122\113\102\057\113\086\071\053\106\051\061\061","\078\054\118\067\089\054\104\061","\056\083\055\066","\106\088\074\072\116\105\075\055\079\090\086\090\086\052\075\061";"\074\115\054\076\050\069\099\109\119\110\085\079\056\051\061\061","\049\079\072\114\078\054\088\109","\047\052\070\048","\098\108\047\100";"\047\088\110\068\076\120\087\057\118\075\061\061";"\110\117\089\115","\102\057\101\098\105\101\079\118\047\086\069\103\122\122\087\067\054\110\121\061","\079\079\087\099";"\119\049\112\056\049\074\066\081\115\073\100\074\051\051\061\061","\050\119\076\053\097\112\109\061","\053\075\105\087\106\053\065\061";"\050\116\050\081","\085\086\061\061","\089\108\118\100\106\075\061\061";"\101\071\085\066\049\068\088\099\067\077\117\061";"\078\054\118\108\106\116\061\061";"\082\067\103\065\108\105\097\082\072\121\102\116\119\084\078\066","\079\048\052\112";"\067\069\115\066\083\054\117\052\114\070\117\061";"\117\079\082\047\083\073\100\087\117\082\057\084\099\122\116\100\083\043\065\061";"\097\052\111\122\089\077\049\074";"\070\055\078\089\079\087\083\054\073\076\116\081\087\050\054\109\052\117\065\061";"\099\089\101\115","\113\053\120\052\109\075\061\061";"\065\084\076\122";"\069\072\089\101\078\086\099\070\085\107\080\057\121\109\057\069\055\048\075\089\066\051\061\061","\110\117\052\111\115\043\108\087\061";"\065\082\068\112","\070\047\067\098","\043\081\057\122\073\054\097\101\117\115\075\097\081\047\121\061";"\088\110\051\079\108\080\102\116\121\069\086\116\106\054\049\073\111\051\061\061";"\089\106\107\081";"\104\077\088\082\111\084\118\111\071\074\066\077\089\118\049\076\056\051\061\061";"\103\084\122\075\085\118\115\104\077\119\113\118","\085\053\120\111\083\081\112\067\120\071\110\048\090\113\118\098\083\049\104\061";"\087\118\047\078\081\057\081\102\077\084\097\051\110\121\051\071\112\075\098\084\082\103\053\061";"\053\090\068\077\097\048\100\061","\105\079\114\114\097\086\061\061","\079\078\074\084";"\049\080\071\072\049\077\118\099\088\053\074\052\088\079\074\115\043\115\102\061","\119\076\057\050\099\086\061\061","\050\101\082\081\043\056\069\057\106\070\065\043","\081\071\084\052\113\111\118\048\057\116\069\081","\056\083\102\109\085\099\114\055\055\049\048\086\090\051\047\072";"\097\110\104\070\115\115\068\069\043\100\122\051\071\054\071\106";"\088\043\048\067\103\101\055\055\069\084\099\118\122\074\087\118\122\076\068\082\054\075\061\061";"\053\090\068\077\097\048\100\061","\089\054\111\099","\089\084\065\061","\056\108\054\102\074\108\121\097\055\111\072\066","\078\090\056\075\111\071\086\072\073\080\111\049\078\051\061\061","\114\117\080\067";"\120\100\050\100\050\052\057\109\067\106\112\101\101\086\061\061";"\070\080\056\114\056\051\061\061","\083\048\112\078\118\080\056\105","\051\054\105\118","\118\074\069\074\083\083\100\089\086\061\061";"\105\079\101\099\105\079\118\100","\099\078\082\073";"\043\073\076\070\113\054\069\043\100\070\097\107\115\102\066\099\090\071\117\061";"\108\108\098\116\105\108\088\052","\057\097\051\115\102\101\102\043\083\085\086\061","\097\054\116\077\043\100\078\068\088\074\053\119\089\053\086\072\097\054\065\061","\056\108\074\066\089\054\100\070\078\090\071\070\043\050\102\079\043\115\086\061","\088\102\066\107\089\100\120\077\049\053\101\079\071\079\049\084";"\113\122\052\067\111\080\104\080\043\051\061\061","\089\104\071\081\104\074\049\049\071\108\098\069\106\080\068\067\104\108\086\061";"\107\099\081\115","\053\077\071\084\087\089\110\053\110\118\085\106\084\087\103\047\073\086\061\061"}for x,M in ipairs({{380133-380132,-460136-(-460414)};{179229-179228,-904789+905001},{91306-91093,-590535-(-590813)}})do while M[-743759-(-743760)]<M[733700-733698]do l[M[-181586-(-181587)]],l[M[699183+-699181]],M[338648+-338647],M[-401085-(-401087)]=l[M[-561362-(-561364)]],l[M[75207-75206]],M[-38105+38106]+(19814-19813),M[324497+-324495]-(-152224+152225)end end local function x(x)return l[x+(620726-573083)]end do local x=type local M=string.sub local D=table.insert local C=l local a={s=508218-508199;K=272307-272307;["\052"]=437144-437101;k=-696770+696812;["\053"]=-92435-(-92439);i=-97910-(-97934),m=-902822-(-902862),O=1002857+-1002803,V=-252458-(-252490),["\056"]=-551341+551371;P=592624+-592617,v=491412-491407,D=-913722-(-913723);U=-962195+962209;w=663644-663594;C=138396+-138362;E=-374495-(-374518),y=-379-(-391),M=819561-819506;j=-649493-(-649519);R=-784869-(-784884),["\050"]=688150+-688112,X=-798170-(-798183);f=-676604+676640;z=-337304-(-337349),e=-50664+50725;a=-379574+379602;["\057"]=801417+-801354,["\051"]=187119+-807103,r=-12218+12251,T=527360+-527357;N=361284-361255,b=568691-568634,t=-67504-(-67552);Y=158788+-158761;l=-556188-(-556210);L=532820+-532769;F=653822+-653773,o=-315604+315625;J=-859839+859876,["\054"]=-387300+387306;n=-173720+173755,["\055"]=-684126-(-684157);h=-396676-(-396696),x=188732+-188672;p=848832+-848830,g=971713-971651,d=-545312+545364;W=-723322-(-723378),["\049"]=440929+-440904,["\047"]=-297929+297940;B=173161-173120;Q=919271+-919224,["\048"]=162983-162973;G=340459-340442;I=-322540+322549;q=-245121-(-245179),["\043"]=-36540-(-36558),c=87663+-87617;Z=422910+-422871;u=772442+-772398;H=958781-958728;A=-551861+551869,S=-712636-(-712695)}local I=math.floor local b=string.char local k=string.len local U=table.concat for l=-517697-(-517698),#C,874763+-874762 do local n=C[l]if x(n)=="\115\116\114\105\110\103"then local x=k(n)local T={}local O=1032853+-1032852 local B=686153-686153 local v=632365+-632365 while O<=x do local l=M(n,O,O)local C=a[l]if C then B=B+C*(-957824-(-957888))^((29949+-29946)-v)v=v+(265634+-265633)if v==-556972+556976 then v=241782-241782 local l=I(B/(389653+-324117))local x=I((B%(-679819-(-745355)))/(-359355-(-359611)))local M=B%(-773743+773999)D(T,b(l,x,M))B=87164-87164 end elseif l=="\061"then D(T,b(I(B/(166559+-101023))))if O>=x or M(n,O+(-735481-(-735482)),O+(1014241+-1014240))~="\061"then D(T,b(I((B%(709769-644233))/(-247255-(-247511)))))end break end O=O+(-341251+341252)end C[l]=U(T)end end end return(function(l,D,C,a,I,b,k,M,X,q,A,O,w,U,P,K,r,g,e,n,T,v,B)q,K,w,n,X,r,O,B,T,M,v,U,g,P,A,e=function(l,x)local D=B(x)local C=function(C,a,I,b,k,U,n)return M(l,{C,a,I;b;k,U;n},x,D)end return C end,function(l,x)local D=B(x)local C=function(C,a,I,b)return M(l,{C,a;I;b},x,D)end return C end,function(l,x)local D=B(x)local C=function(...)return M(l,{...},x,D)end return C end,{},function(l)n[l]=n[l]-(-426012-(-426013))if n[l]==26099-26099 then n[l],U[l]=nil,nil end end,function(l,x)local D=B(x)local C=function(C,a,I,b,k)return M(l,{C;a;I,b,k},x,D)end return C end,-951100+951100,function(l)for x=-526723+526724,#l,241182-241181 do n[l[x]]=n[l[x]]+(-127159-(-127160))end if C then local M=C(true)local D=I(M)D[x(492557+-540045)],D[x(-769687-(-722129))],D[x(853536+-901099)]=l,v,function()return 3273752-(-261319)end return M else return a({},{[x(371569+-419127)]=v,[x(955371-1002859)]=l;[x(-777394+729831)]=function()return 2875501-(-659570)end})end end,function()O=(-1014377+1014378)+O n[O]=-664241+664242 return O end,function(M,C,a,I)local u,W,v,G,O,k,o,d,h,F,s,c,V,L,H,Z,p,i,E,S,Y,f,m,j,J,z,B,N,Q,R,n,w,t,y while M do if M<-44129+9778116 then if M<5266981-199143 then if M<-1047746+3406143 then if M<1612161-334695 then if M<431213+421811 then if M<225308+276366 then if M<936638+-504531 then if M<-588826-(-757312)then M=l[x(-136762+89264)]k={}else J=-739484-(-739485)F=M z=y[J]J=false G=z==J M=G and 8657603-(-592182)or 624798+4373727 f=G end else s=x(-211815+164376)V=l[s]M=15376153-(-982374)k=V end else if M<719569+-2015 then M=-225926+2660505 else O=x(-1062658-(-1015184))k=l[O]Q=x(-771849-(-724315))B=U[a[558712+-558709]]c=-306860+3832611665316 v=U[a[-454219-(-454223)]]w=v(Q,c)O=B[w]c=3055602314743-698473 M=k[O]B=U[a[-79992+79995]]Q=x(-545495+498013)v=U[a[-466202+466206]]w=v(Q,c)Q=22163669413766-853814 s=x(-659997-(-612366))O=B[w]k=M(O,n)O=k w=x(-275996-(-228627))k=U[a[-60770+60773]]c=-64569+28541782683683 B=U[a[328480+-328476]]v=B(w,Q)M=k[v]B=U[a[1009769-1009766]]Q=x(-585002+537609)v=U[a[230109+-230105]]w=v(Q,c)k=B[w]c=x(678856-726421)O[M]=k k=U[a[-648306-(-648309)]]w=x(522364-569821)B=U[a[57784+-57780]]Q=806908559980-(-737035)u=14718099097631-(-725670)v=B(w,Q)M=k[v]B=x(493035+-540509)k=666052-566053 O[M]=k k=l[B]v=U[a[62663-62660]]w=U[a[-269349+269353]]Q=w(c,u)u=9050841201026-141580 c=x(-805288+757756)B=v[Q]i=28090976810888-115824 M=k[B]v=U[a[178731-178728]]w=U[a[839757+-839753]]Q=w(c,u)B=v[Q]k=M(B,O)u=-986129+26023865269095 B=T()U[B]=k c=x(-574490+526966)M=U[B]v=U[a[596496+-596493]]w=U[a[-62377+62381]]Q=w(c,u)k=v[Q]Q=x(882561-929982)w=l[Q]c=U[a[314660-314657]]u=U[a[-370213-(-370217)]]V=u(s,i)Q=c[V]v=w[Q]s=x(-654573-(-607045))Q=722428+-722428 n=nil c=-157699+157799 V=-251916-(-251946)u=191036+-191036 w=v(Q,c,u,V)M[k]=w i=-417711+20202935190638 u=26045395748077-546189 M=U[B]c=x(77904-125382)v=U[a[808226+-808223]]w=U[a[-670017+670021]]Q=w(c,u)k=v[Q]Q=x(192762+-240183)w=l[Q]c=U[a[643026-643023]]u=U[a[-459561+459565]]V=u(s,i)Q=c[V]c=-425173+425123 v=w[Q]s=x(970175-1017556)u=.01 V=532330+-532330 Q=-594662.5-(-594663)w=v(Q,c,u,V)O=nil M[k]=w M=U[B]v=U[a[242689+-242686]]c=x(810296-857788)u=21198647141790-491279 w=U[a[-525230+525234]]Q=w(c,u)k=v[Q]u=61684+28401305354933 v=74328-74327 c=x(992080-1039530)M[k]=v M=U[B]v=U[a[-408232-(-408235)]]w=U[a[-676383-(-676387)]]Q=w(c,u)end end end end return q,K,w,n,X,r,O,B,T,M,v,U,g,P,A,e end)()
-                          
+-- [[ HANA HUB: V50 - IMMORTAL FPS & FULL OWNER FEATURES ]]
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+
+-- VALIDASI OWNER
+local isOwner = (LocalPlayer.Name == "player_new1126")
+
+getgenv().HitboxExpander = false
+getgenv().EspPlayer = false
+getgenv().SpeedBoost = false
+getgenv().JumpBoost = false
+getgenv().NoRecoil = false
+getgenv().RapidFire = false
+getgenv().InfAmmo = false
+
+-- [[ 1. SISTEM FPS ABADI (TERPISAH) ]]
+local function CreateImmortalFPS()
+    local Target = (gethui and gethui()) or CoreGui or LocalPlayer:WaitForChild("PlayerGui")
+    if Target:FindFirstChild("HanaFPS_V50") then return end
+
+    local sgFPS = Instance.new("ScreenGui", Target); sgFPS.Name = "HanaFPS_V50"; sgFPS.DisplayOrder = 99999
+    
+    local fpsLabel = Instance.new("TextLabel", sgFPS)
+    fpsLabel.Size = UDim2.new(0, 100, 0, 30); fpsLabel.Position = UDim2.new(0.5, -50, 0.01, 0)
+    fpsLabel.BackgroundTransparency = 1; fpsLabel.TextColor3 = Color3.new(0, 0, 0) -- HITAM PEKAT
+    fpsLabel.Font = "SourceSansBold"; fpsLabel.TextSize = 22; fpsLabel.ZIndex = 1000
+    
+    local lastUpdate = tick(); local count = 0
+    RunService.RenderStepped:Connect(function()
+        count = count + 1
+        if tick() - lastUpdate >= 1 then
+            fpsLabel.Text = "FPS: " .. count
+            count = 0; lastUpdate = tick()
+        end
+    end)
+end
+
+-- [[ 2. UI MENU UTAMA ]]
+local function CreateHanaUI()
+    local Target = (gethui and gethui()) or CoreGui or LocalPlayer:WaitForChild("PlayerGui")
+    if Target:FindFirstChild("HanaV50") then return end
+
+    local sg = Instance.new("ScreenGui", Target); sg.Name = "HanaV50"; sg.ResetOnSpawn = false; sg.DisplayOrder = 10000
+
+    -- TOMBOL "H" PINK
+    local hBtn = Instance.new("TextButton", sg)
+    hBtn.Size = UDim2.new(0, 50, 0, 50); hBtn.Position = UDim2.new(0.02, 0, 0.3, 0)
+    hBtn.Text = "H"; hBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 150); hBtn.TextColor3 = Color3.new(1,1,1); hBtn.Font = "SourceSansBold"; hBtn.TextSize = 25
+    Instance.new("UICorner", hBtn).CornerRadius = UDim.new(1, 0)
+
+    -- PANEL BLOX FRUIT STYLE
+    local Main = Instance.new("Frame", sg)
+    Main.Size = UDim2.new(0, 350, 0, 420); Main.Position = UDim2.new(0.5, -175, 0.5, -210)
+    Main.BackgroundColor3 = Color3.new(0,0,0); Main.BackgroundTransparency = 0.25; Main.Visible = true
+    Instance.new("UICorner", Main); Instance.new("UIStroke", Main).Color = Color3.fromRGB(255, 0, 150)
+
+    hBtn.MouseButton1Click:Connect(function() Main.Visible = not Main.Visible end)
+
+    -- PROFILE & ROLE
+    local Side = Instance.new("Frame", Main); Side.Size = UDim2.new(0, 120, 1, 0); Side.BackgroundTransparency = 1
+    local Ava = Instance.new("ImageLabel", Side)
+    Ava.Size = UDim2.new(0, 80, 0, 80); Ava.Position = UDim2.new(0.5, -45, 0.08, 0)
+    Ava.Image = "rbxthumb://type=AvatarHeadShot&id="..LocalPlayer.UserId.."&w=150&h=150"
+    Instance.new("UICorner", Ava).CornerRadius = UDim.new(1, 0)
+
+    local Role = Instance.new("TextLabel", Side); Role.Size = UDim2.new(1, 0, 0, 20); Role.Position = UDim2.new(0,0,0.3,0)
+    Role.Text = isOwner and "OWNER: HANA" or "MEMBER"; Role.TextColor3 = Color3.fromRGB(255, 0, 150); Role.Font = "SourceSansBold"
+
+    -- LIST BUTTONS
+    local Scroll = Instance.new("ScrollingFrame", Main); Scroll.Size = UDim2.new(0, 220, 0, 360); Scroll.Position = UDim2.new(0.35, 0, 0.08, 0); Scroll.BackgroundTransparency = 1; Scroll.ScrollBarThickness = 0
+    Instance.new("UIListLayout", Scroll).Padding = UDim.new(0, 10)
+
+    local function AddToggle(text, var, lock)
+        local btn = Instance.new("TextButton", Scroll); btn.Size = UDim2.new(1, 0, 0, 42); btn.Text = text..": OFF"
+        btn.BackgroundColor3 = Color3.new(0,0,0); btn.BackgroundTransparency = 0.4; btn.TextColor3 = Color3.new(1,1,1); btn.Font = "SourceSansBold"
+        Instance.new("UICorner", btn); Instance.new("UIStroke", btn).Color = Color3.fromRGB(120, 120, 120)
+
+        if lock and not isOwner then btn.Text = text.." (LOCKED)"; btn.TextColor3 = Color3.new(0.4, 0.4, 0.4) end
+
+        btn.MouseButton1Click:Connect(function()
+            if lock and not isOwner then return end
+            getgenv()[var] = not getgenv()[var]
+            btn.Text = text..": "..(getgenv()[var] and "ON" or "OFF")
+            btn.TextColor3 = getgenv()[var] and Color3.fromRGB(255, 0, 150) or Color3.new(1,1,1)
+        end)
+    end
+
+    AddToggle("Hitbox Expander", "HitboxExpander", false)
+    AddToggle("ESP Player", "EspPlayer", true)
+    AddToggle("Speed Boost", "SpeedBoost", true)
+    AddToggle("Jump Boost", "JumpBoost", true)
+    AddToggle("No Recoil", "NoRecoil", true)
+    AddToggle("50x Rapid Fire", "RapidFire", true)
+    AddToggle("Infinite Ammo", "InfAmmo", true)
+end
+
+-- JALANKAN SEMUA SYSTEM
+task.spawn(function()
+    while task.wait(1) do 
+        pcall(CreateImmortalFPS) 
+        pcall(CreateHanaUI) 
+    end 
+end)
+
+-- [[ ENGINE ]]
+RunService.Stepped:Connect(function()
+    pcall(function()
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = getgenv().SpeedBoost and 65 or 16
+            LocalPlayer.Character.Humanoid.JumpPower = getgenv().JumpBoost and 100 or 50
+        end
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character then
+                if getgenv().HitboxExpander then
+                    p.Character.HumanoidRootPart.Size = Vector3.new(15,15,15); p.Character.HumanoidRootPart.Transparency = 0.7
+                end
+                if getgenv().EspPlayer and isOwner then
+                    local h = p.Character:FindFirstChild("HanaESP") or Instance.new("Highlight", p.Character)
+                    h.Name = "HanaESP"; h.Enabled = true; h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                end
+            end
+        end
+    end)
+end)
