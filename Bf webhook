@@ -1,39 +1,71 @@
--- [[ HANA HUB V13.6 - RACE V4 TRACKER ]] --
-local script_tag = "HanaHub_V4"
+local url = "https://discord.com/api/webhooks/1463523614526668804/LxW8YDeLWkOWKrzvgWfrFfOuunUjAEJO3RwmfO-ZansS0XaJ6zZNPEmblPMtXFa-gWVU"
+local p, startT = game.Players.LocalPlayer, os.time()
+local D = p:WaitForChild("Data")
+local B, E = D.Beli, D.Experience
+local sB, lB, kills, v4A, v4S, v4T = B.Value, B.Value, 0, false, 0, 0
 
--- AUTO CLEANUP
-for _, old_ui in pairs(game.CoreGui:GetChildren()) do
-    if old_ui.Name == script_tag then old_ui:Destroy() end
+local function f(v) return tostring(v):reverse():gsub("%d%d%d", "%1."):reverse():gsub("^%.", "") end
+local function dur(s) local d = os.time()-s return string.format("%dh %dm %ds", d/3600, (d%3600)/60, d%60) end
+
+local function send(pay)
+    local req = (syn and syn.request) or http_request or request or (http and http.request)
+    if req then
+        pcall(function()
+            req({
+                Url = url,
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = game:GetService("HttpService"):JSONEncode(pay)
+            })
+        end)
+    end
 end
 
-local webhook_url = "https://discord.com/api/webhooks/1463523614526668804/LxW8YDeLWkOWKrzvgWfrFfOuunUjAEJO3RwmfO-ZansS0XaJ6zZNPEmblPMtXFa-gWVU"
-local p = game.Players.LocalPlayer
-local Data = p:WaitForChild("Data")
-local Beli, Frag, Exp = Data:WaitForChild("Beli"), Data:WaitForChild("Fragments"), Data:WaitForChild("Experience")
+-- Fungsi Laporan Utama (Setiap 5 Menit)
+local function report()
+    local fps = math.floor(1/game:GetService("RunService").RenderStepped:Wait())
+    local loc = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name
+    local curB = B.Value
+    
+    -- Cek V4
+    local v4 = p.Character:FindFirstChild("RaceTrans") or p.Character:FindFirstChild("RaceEnergy")
+    if v4 and not v4A then v4A, v4S = true, os.time() 
+    elseif not v4 and v4A then v4A, v4T = false, v4T + (os.time()-v4S) end
 
--- V4 & Stats Tracking
-local startBeli, startFrag = Beli.Value, Frag.Value
-local lastBeli, lastFrag = Beli.Value, Frag.Value
-local totalKills, startTime = 0, os.time()
-local main_msg_id = nil
-
--- Race V4 Logic
-local v4_active = false
-local v4_start_time = 0
-local total_v4_duration = 0
-
--- Helper: Format Titik
-local function format(v)
-    return tostring(v):reverse():gsub("%d%d%d", "%1."):reverse():gsub("^%.", "")
+    send({
+        embeds = {{
+            title = v4A and "🔴 STATUS: V4 ACTIVE" or "⚪ STATUS: FARMING",
+            color = v4A and 16711680 or 3447003,
+            fields = {
+                {name="📍 INFO", value="```"..loc.."\nFPS: "..fps.."```", inline=false},
+                {name="📈 GAIN (5M)", value="```diff\n+ $"..f(curB-lB).."```", inline=true},
+                {name="🏆 TOTAL", value="```yaml\n$"..f(curB).."```", inline=true},
+                {name="⚔️ STATS", value="```Kills: "..kills.."\nV4 Time: "..v4T.."s```", inline=false},
+                {name="⏳ RUNTIME", value="`"..dur(startT).."`", inline=true}
+            }
+        }}
+    })
+    
+    if fps < 15 then send({content="⚠️ Low FPS: "..fps}) end
+    lB = curB
 end
 
--- Helper: Runtime
-local function getDuration(s)
-    local diff = os.time() - s
-    return string.format("%dh %dm %ds", math.floor(diff / 3600), math.floor((diff % 3600) / 60), diff % 60)
-end
+E.Changed:Connect(function() kills = kills + 1 end)
 
-local function sendWebhook(payload, id)
+-- UI Screen biar lo tau script udah masuk
+local sg = Instance.new("ScreenGui", game.CoreGui); sg.Name = "HanaNotif"
+local t = Instance.new("TextLabel", sg)
+t.Size, t.Position, t.Text = UDim2.new(0,220,0,35), UDim2.new(0,10,1,-45), "HANA V13.9: LOADED!"
+t.TextColor3, t.BackgroundColor3, t.Font = Color3.new(0,1,0), Color3.new(0,0,0), "GothamBold"
+task.delay(5, function() sg:Destroy() end)
+
+-- Loop Utama (Tiap 5 Menit / 300 Detik)
+task.spawn(function()
+    report() -- Kirim sekali pas start
+    while task.wait(300) do 
+        pcall(report)
+    end
+end)
     local url = id and (webhook_url .. "/messages/" .. id) or (webhook_url .. "?wait=true")
     local method = id and "PATCH" or "POST"
     local req = (syn and syn.request) or http_request or request
