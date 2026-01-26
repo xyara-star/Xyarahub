@@ -2,77 +2,64 @@ local url = "https://discord.com/api/webhooks/1463523614526668804/LxW8YDeLWkOWKr
 local p = game.Players.LocalPlayer
 local startTime = os.time()
 
--- Ambil data (pake cara paling aman biar gak stuck)
-local stats = p:FindFirstChild("Data")
-local beli = stats and stats:FindFirstChild("Beli")
-local exp = stats and stats:FindFirstChild("Experience")
+local stats = p:WaitForChild("Data")
+local beli = stats:WaitForChild("Beli")
+local frag = stats:WaitForChild("Fragments")
 
-local startB = beli and beli.Value or 0
-local lastB = startB
+local startB, startF = beli.Value, frag.Value
+local lastB, lastF = startB, startF
 local kills = 0
-
--- Fungsi Kirim (Polos)
-local function send(content)
-    local req = (syn and syn.request) or http_request or request or (http and http.request)
-    if req then
-        req({
-            Url = url,
-            Method = "POST",
-            Headers = {["Content-Type"] = "application/json"},
-            Body = game:GetService("HttpService"):JSONEncode(content)
-        })
-    end
-end
-
--- Deteksi V4
 local v4Time = 0
 local v4Active = false
-local v4Start = 0
 
-local function checkV4()
-    local char = p.Character
-    local hasV4 = char and (char:FindFirstChild("RaceTrans") or char:FindFirstChild("RaceEnergy"))
-    if hasV4 and not v4Active then
-        v4Active = true
-        v4Start = os.time()
-    elseif not hasV4 and v4Active then
-        v4Active = false
-        v4Time = v4Time + (os.time() - v4Start)
+local function f(v) return tostring(v):reverse():gsub("%d%d%d", "%1."):reverse():gsub("^%.", "") end
+
+local function send(content)
+    local req = (syn and syn.request) or http_request or request or (http and http.request)
+    if req then pcall(function() req({Url = url, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = game:GetService("HttpService"):JSONEncode(content)}) end) end
+end
+
+-- SISTEM KILL: Murni deteksi lewat kenaikan Beli (Duit)
+beli.Changed:Connect(function(newVal)
+    if newVal > lastB then
+        kills = kills + 1
+        lastB = newVal -- Update benchmark biar akurat
     end
-end
+end)
 
--- Update Kill
-if exp then
-    exp.Changed:Connect(function() kills = kills + 1 end)
-end
-
--- Notif di Screen (Pasti muncul kalau script jalan)
-local sg = Instance.new("ScreenGui", game.CoreGui)
-local t = Instance.new("TextLabel", sg)
-t.Size, t.Position, t.Text = UDim2.new(0,250,0,40), UDim2.new(0,10,1,-50), "HANA V14.0: ATTEMPT SEND..."
-t.TextColor3, t.BackgroundColor3 = Color3.new(1,1,1), Color3.new(0,0,0)
-
--- Loop Laporan
+-- Thread V4 Realtime
 task.spawn(function()
-    -- Kirim Startup Notif dulu buat tes koneksi
-    send({content = "✅ **Hana Script Connected!** Memulai pemantauan akun: " .. p.Name})
-    
-    while task.wait(300) do -- Tiap 5 menit
-        checkV4()
-        local curB = beli and beli.Value or 0
+    while task.wait(1) do
+        local char = p.Character
+        if char and (char:FindFirstChild("RaceTrans") or char:FindFirstChild("RaceEnergy")) then
+            v4Active = true
+            v4Time = v4Time + 1 
+        else
+            v4Active = false
+        end
+    end
+end)
+
+-- Laporan 5 Menit
+task.spawn(function()
+    send({content = "✅ **Hana V14.5 Started!** Kill Detection via Money is Active."})
+    while task.wait(300) do
+        local curB, curF = beli.Value, frag.Value
         local run = os.time() - startTime
-        
         send({
             embeds = {{
-                title = "📊 MONITORING REPORT",
+                title = "📊 HANA HUB - MONITORING",
+                color = v4Active and 16711680 or 3447003,
                 fields = {
-                    {name = "💰 MONEY", value = "Gain: $"..(curB-lastB).."\nTotal: $"..curB},
-                    {name = "⚔️ STATS", value = "Kills: "..kills.."\nV4 Duration: "..v4Time.."s"},
-                    {name = "⏳ RUNTIME", value = math.floor(run/60).." Minutes"}
-                },
-                color = 3447003
+                    {name = "💰 MONEY", value = "```diff\n+ Gain (5m): $"..f(curB-lastB).."\n⭐ All-Time: $"..f(curB-startB).."\n💵 Total: $"..f(curB).."```"},
+                    {name = "💎 FRAGMENTS", value = "```diff\n+ Gain (5m): "..f(curF-lastF).."\n✨ Total: "..f(curF).."```"},
+                    {name = "⚔️ COMBAT", value = "```Kills: "..kills.."```", inline = true},
+                    {name = "🔴 RACE V4", value = "```Time: "..v4Time.."s```", inline = true},
+                    {name = "⏳ RUNTIME", value = "`" .. math.floor(run/60) .. " Minutes`"}
+                }
             }}
         })
-        lastB = curB
+        lastF = curF
+        -- lastB diupdate otomatis oleh event .Changed di atas
     end
 end)
