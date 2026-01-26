@@ -1,0 +1,126 @@
+-- [[ HANA HUB V13.6 - RACE V4 TRACKER ]] --
+local script_tag = "HanaHub_V4"
+
+-- AUTO CLEANUP
+for _, old_ui in pairs(game.CoreGui:GetChildren()) do
+    if old_ui.Name == script_tag then old_ui:Destroy() end
+end
+
+local webhook_url = "https://discord.com/api/webhooks/1463523614526668804/LxW8YDeLWkOWKrzvgWfrFfOuunUjAEJO3RwmfO-ZansS0XaJ6zZNPEmblPMtXFa-gWVU"
+local p = game.Players.LocalPlayer
+local Data = p:WaitForChild("Data")
+local Beli, Frag, Exp = Data:WaitForChild("Beli"), Data:WaitForChild("Fragments"), Data:WaitForChild("Experience")
+
+-- V4 & Stats Tracking
+local startBeli, startFrag = Beli.Value, Frag.Value
+local lastBeli, lastFrag = Beli.Value, Frag.Value
+local totalKills, startTime = 0, os.time()
+local main_msg_id = nil
+
+-- Race V4 Logic
+local v4_active = false
+local v4_start_time = 0
+local total_v4_duration = 0
+
+-- Helper: Format Titik
+local function format(v)
+    return tostring(v):reverse():gsub("%d%d%d", "%1."):reverse():gsub("^%.", "")
+end
+
+-- Helper: Runtime
+local function getDuration(s)
+    local diff = os.time() - s
+    return string.format("%dh %dm %ds", math.floor(diff / 3600), math.floor((diff % 3600) / 60), diff % 60)
+end
+
+local function sendWebhook(payload, id)
+    local url = id and (webhook_url .. "/messages/" .. id) or (webhook_url .. "?wait=true")
+    local method = id and "PATCH" or "POST"
+    local req = (syn and syn.request) or http_request or request
+    if req then
+        local res = req({Url = url, Method = method, Headers = {["Content-Type"] = "application/json"}, Body = game:GetService("HttpService"):JSONEncode(payload)})
+        if method == "POST" and res.Success then return game:GetService("HttpService"):JSONDecode(res.Body).id end
+    end
+end
+
+-- DASHBOARD UPDATE (Permanen)
+local function updateDashboard()
+    local location = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name
+    local fps = math.floor(1/game:GetService("RunService").RenderStepped:Wait())
+    
+    -- Cek Mode V4 (Biasanya ditandai dengan folder "RaceTrans" di Character)
+    local hasV4 = p.Character:FindFirstChild("RaceTrans") or p.Character:FindFirstChild("RaceEnergy")
+    if hasV4 and not v4_active then
+        v4_active = true
+        v4_start_time = os.time()
+    elseif not hasV4 and v4_active then
+        v4_active = false
+        total_v4_duration = total_v4_duration + (os.time() - v4_start_time)
+    end
+
+    local payload = {
+        ["embeds"] = {{
+            ["title"] = "🔱 HANA HUB - V4 MONITORING",
+            ["color"] = v4_active and 16711680 or 3447003, -- Merah kalau aktif, Biru kalau nggak
+            ["fields"] = {
+                {
+                    ["name"] = "📍 LOCATION & PERFORMANCE",
+                    ["value"] = "```location\nIsland: " .. location .. "\nFPS: " .. fps .. (fps < 20 and " (LOW)" or " (GOOD)") .. "```",
+                    ["inline"] = false
+                },
+                {
+                    ["name"] = "🔴 RACE V4 STATUS",
+                    ["value"] = "```fix\nStatus: " .. (v4_active and "AWAKENED!" or "Normal") .. "\nLast Active: " .. (v4_active and getDuration(v4_start_time) or "0s") .. "```",
+                    ["inline"] = false
+                },
+                {
+                    ["name"] = "⚔️ SESSION STATS",
+                    ["value"] = "```diff\n+ Total Kills: " .. totalKills .. "\n+ Total V4 Time: " .. total_v4_duration .. "s```",
+                    ["inline"] = false
+                },
+                {
+                    ["name"] = "⏳ TOTAL RUNTIME",
+                    ["value"] = "`" .. getDuration(startTime) .. "`",
+                    ["inline"] = true
+                }
+            },
+            ["footer"] = {["text"] = "Auto-Edit Mode Active • " .. os.date("%X")}
+        }}
+    }
+    main_msg_id = sendWebhook(payload, main_msg_id)
+end
+
+-- LOG PENDAPATAN (Beruntun tiap 5m)
+local function sendFarmingReport()
+    local currentBeli, currentFrag = Beli.Value, Frag.Value
+    sendWebhook({
+        ["embeds"] = {{
+            ["title"] = "📈 REVENUE REPORT",
+            ["color"] = 65280,
+            ["fields"] = {
+                {["name"] = "💵 Gained (5m)", ["value"] = "```diff\n+ $" .. format(currentBeli - lastBeli) .. "```", ["inline"] = true},
+                {["name"] = "🏆 Total Session", ["value"] = "```yaml\n⭐ $" .. format(currentBeli - startBeli) .. "```", ["inline"] = true},
+                {["name"] = "💰 Current Balance", ["value"] = "**$" .. format(currentBeli) .. "**", ["inline"] = false}
+            }
+        }}
+    })
+    lastBeli, lastFrag = currentBeli, currentFrag
+end
+
+-- Kill Tracker
+Exp.Changed:Connect(function() totalKills = totalKills + 1 end)
+
+-- Loops
+task.spawn(function()
+    while task.wait(30) do pcall(updateDashboard) end
+end)
+
+task.spawn(function()
+    while task.wait(300) do pcall(sendFarmingReport) end
+end)
+
+-- Screen UI Start
+local sg = Instance.new("ScreenGui", game.CoreGui); sg.Name = script_tag
+local f = Instance.new("Frame", sg); f.Size, f.Position, f.BackgroundColor3 = UDim2.new(0, 220, 0, 40), UDim2.new(0, 10, 1, -50), Color3.fromRGB(15,15,15)
+local t = Instance.new("TextLabel", f); t.Size, t.Text, t.TextColor3, t.Font, t.BackgroundTransparency = UDim2.new(1,0,1,0), "V4 MONITOR ACTIVE", Color3.fromRGB(255, 50, 50), "GothamBold", 1
+task.delay(5, function() if sg then sg:Destroy() end end)
