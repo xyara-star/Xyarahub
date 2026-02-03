@@ -1,149 +1,166 @@
--- [[ HANA HUB: V11.0 - GOD MODE EDITION ]] --
+-- [[ HANA HUB: V29.0 - PROFILE AT TOP ]] --
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- [[ CONFIG ]] --
 getgenv().Hana = {
-    AimOn = false,
-    HitOn = false,
-    SpeedOn = false,
-    JumpOn = true,
-    HitSize = 15,
-    SpeedVal = 80,
-    Target = nil
+    AimOn = false, HitOn = false, SpeedOn = false, EspOn = false,
+    AntiStun = false, HitSize = 15, SpeedVal = 80,
+    CurrentTarget = nil
 }
 
 -- [[ UI CLEANUP ]] --
-if game.CoreGui:FindFirstChild("HanaV11") then game.CoreGui.HanaV11:Destroy() end
-local ScreenGui = Instance.new("ScreenGui", game.CoreGui); ScreenGui.Name = "HanaV11"
+if game.CoreGui:FindFirstChild("HanaV29") then game.CoreGui.HanaV29:Destroy() end
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui); ScreenGui.Name = "HanaV29"
 
--- TOMBOL H
-local HBtn = Instance.new("TextButton", ScreenGui)
-HBtn.Size = UDim2.new(0, 45, 0, 45); HBtn.Position = UDim2.new(0, 10, 0.5, -22)
-HBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 150); HBtn.Text = "H"; HBtn.TextColor3 = Color3.new(1,1,1)
-HBtn.Draggable = true; Instance.new("UICorner", HBtn).CornerRadius = UDim.new(1,0)
+local function MakeDraggable(obj)
+    local dragging, dragInput, dragStart, startPos
+    obj.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; dragStart = input.Position; startPos = obj.Position
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+        end
+    end)
+    obj.InputChanged:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            obj.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
 
--- TOMBOL JUMP
-local JumpBtn = Instance.new("TextButton", ScreenGui)
-JumpBtn.Size = UDim2.new(0, 45, 0, 45); JumpBtn.Position = UDim2.new(0.9, 0, 0.02, 0)
-JumpBtn.Text = "^"; JumpBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 255); JumpBtn.TextColor3 = Color3.new(1,1,1)
-Instance.new("UICorner", JumpBtn)
+-- [[ MAIN UI ]] --
+local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 220, 0, 350); Main.Position = UDim2.new(0.5, -110, 0.5, -175); Main.BackgroundColor3 = Color3.fromRGB(10, 10, 10); Main.BackgroundTransparency = 0.2; Main.Visible = false; Instance.new("UICorner", Main)
+local Stroke = Instance.new("UIStroke", Main); Stroke.Color = Color3.fromRGB(150, 0, 255); Stroke.Thickness = 2
+MakeDraggable(Main)
 
--- TARGET INFO BOX
-local InfoBox = Instance.new("Frame", ScreenGui)
-InfoBox.Size = UDim2.new(0, 180, 0, 85); InfoBox.Position = UDim2.new(0.85, -180, 0.1, 0)
-InfoBox.BackgroundColor3 = Color3.new(0,0,0); InfoBox.BackgroundTransparency = 0.5; InfoBox.Visible = false
-local InfoText = Instance.new("TextLabel", InfoBox); InfoText.Size = UDim2.new(1,-10,1,-10); InfoText.Position = UDim2.new(0,5,0,5); InfoText.BackgroundTransparency = 1; InfoText.TextColor3 = Color3.new(1,1,1); InfoText.TextSize = 13; InfoText.RichText = true; InfoText.TextXAlignment = "Left"
-Instance.new("UICorner", InfoBox)
+-- [[ PROFILE SECTION (AT TOP) ]] --
+local ProfileFrame = Instance.new("Frame", Main); ProfileFrame.Size = UDim2.new(1, 0, 0, 60); ProfileFrame.BackgroundTransparency = 1
+local PImg = Instance.new("ImageLabel", ProfileFrame); PImg.Size = UDim2.new(0, 40, 0, 40); PImg.Position = UDim2.new(0, 10, 0, 10); PImg.Image = "rbxthumb://type=AvatarHeadShot&id="..LocalPlayer.UserId.."&w=150&h=150"; Instance.new("UICorner", PImg).CornerRadius = UDim.new(1,0)
+local PName = Instance.new("TextLabel", ProfileFrame); PName.Size = UDim2.new(0.6, 0, 0.5, 0); PName.Position = UDim2.new(0, 55, 0, 10); PName.Text = LocalPlayer.DisplayName; PName.TextColor3 = Color3.new(1,1,1); PName.TextXAlignment = "Left"; PName.BackgroundTransparency = 1; PName.Font = "SourceSansBold"; PName.TextSize = 14
+local PStatus = Instance.new("TextLabel", ProfileFrame); PStatus.Size = UDim2.new(0.6, 0, 0.5, 0); PStatus.Position = UDim2.new(0, 55, 0, 25); PStatus.Text = "HANA HUB USER"; PStatus.TextColor3 = Color3.fromRGB(150, 0, 255); PStatus.TextXAlignment = "Left"; PStatus.BackgroundTransparency = 1; PStatus.Font = "SourceSans"; PStatus.TextSize = 10
 
--- MAIN MENU WITH PROFILE
-local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 240, 0, 380); Main.Position = UDim2.new(0.5, -120, 0.5, -190)
-Main.BackgroundColor3 = Color3.fromRGB(15,15,15); Main.BackgroundTransparency = 0.1; Main.Visible = false; Instance.new("UICorner", Main)
+local Line = Instance.new("Frame", Main); Line.Size = UDim2.new(0.9, 0, 0, 1); Line.Position = UDim2.new(0.05, 0, 0, 60); Line.BackgroundColor3 = Color3.fromRGB(150, 0, 255); Line.BackgroundTransparency = 0.5; Line.BorderSizePixel = 0
 
--- PROFILE HEADER
-local Prof = Instance.new("Frame", Main); Prof.Size = UDim2.new(0.9, 0, 0, 80); Prof.Position = UDim2.new(0.05, 0, 0.03, 0); Prof.BackgroundColor3 = Color3.fromRGB(30,30,30); Prof.BackgroundTransparency = 0.5; Instance.new("UICorner", Prof)
-local Img = Instance.new("ImageLabel", Prof); Img.Size = UDim2.new(0, 50, 0, 50); Img.Position = UDim2.new(0.05, 0, 0.2, 0); Img.Image = "rbxthumb://type=AvatarHeadShot&id="..LocalPlayer.UserId.."&w=150&h=150"; Instance.new("UICorner", Img).CornerRadius = UDim.new(1,0)
-local LName = Instance.new("TextLabel", Prof); LName.Size = UDim2.new(0.6, 0, 0.5, 0); LName.Position = UDim2.new(0.35, 0, 0.25, 0); LName.Text = "User: "..LocalPlayer.Name; LName.TextColor3 = Color3.new(1,1,1); LName.Font = "SourceSansBold"; LName.BackgroundTransparency = 1; LName.TextXAlignment = "Left"
+-- [[ SCROLLING CONTAINER ]] --
+local Container = Instance.new("ScrollingFrame", Main); Container.Size = UDim2.new(0.9, 0, 0.72, 0); Container.Position = UDim2.new(0.05, 0, 0.2, 0); Container.BackgroundTransparency = 1; Container.ScrollBarThickness = 0
+local Layout = Instance.new("UIListLayout", Container); Layout.Padding = UDim.new(0, 6); Layout.HorizontalAlignment = "Center"
 
--- LAYERS
-local L1 = Instance.new("ScrollingFrame", Main); L1.Size = UDim2.new(1,0,0.6,0); L1.Position = UDim2.new(0,0,0.25,0); L1.BackgroundTransparency = 1; L1.ScrollBarThickness = 0
-local L2 = Instance.new("ScrollingFrame", Main); L2.Size = UDim2.new(1,0,0.6,0); L2.Position = UDim2.new(0,0,0.25,0); L2.BackgroundTransparency = 1; L2.ScrollBarThickness = 0; L2.Visible = false
-Instance.new("UIListLayout", L1).Padding = UDim.new(0,8); Instance.new("UIListLayout", L1).HorizontalAlignment = "Center"
-Instance.new("UIListLayout", L2).Padding = UDim.new(0,8); Instance.new("UIListLayout", L2).HorizontalAlignment = "Center"
-
-local TabBtn = Instance.new("TextButton", Main); TabBtn.Size = UDim2.new(0.9,0,0,40); TabBtn.Position = UDim2.new(0.05,0,0.88,0); TabBtn.Text = "MENU SETTINGS (L2)"; TabBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 150); TabBtn.TextColor3 = Color3.new(1,1,1); Instance.new("UICorner", TabBtn)
+-- [[ LOGO π ]] --
+local HBtn = Instance.new("TextButton", ScreenGui); HBtn.Size = UDim2.new(0, 45, 0, 45); HBtn.Position = UDim2.new(0, 20, 0.5, -22); HBtn.Text = "π"; HBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0); HBtn.TextColor3 = Color3.new(1,1,1); HBtn.TextSize = 25; Instance.new("UICorner", HBtn).CornerRadius = UDim.new(1,0)
+Instance.new("UIStroke", HBtn).Color = Color3.fromRGB(150, 0, 255)
+MakeDraggable(HBtn)
+HBtn.MouseButton1Click:Connect(function() Main.Visible = not Main.Visible end)
 
 -- [[ ENGINE ]] --
-local function getClosest()
-    local t, d = nil, 400; local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character.Humanoid.Health > 0 then
-            local pos, onS = Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
-            if onS then
-                local mag = (Vector2.new(pos.X, pos.Y) - center).Magnitude
-                if mag < d then d = mag; t = p end
-            end
+local function GetPlayerLevel(p)
+    local possibleNames = {"leaderstats", "Data", "Stats", "PlayerStats"}
+    for _, name in pairs(possibleNames) do
+        local folder = p:FindFirstChild(name)
+        if folder then
+            local lvl = folder:FindFirstChild("Level") or folder:FindFirstChild("Lvl") or folder:FindFirstChild("Rank")
+            if lvl then return tostring(lvl.Value) end
         end
     end
-    return t
+    return "1"
 end
 
-RunService.RenderStepped:Connect(function()
-    -- ZERO DELAY AIMLOCK
-    if getgenv().Hana.AimOn then
-        if not getgenv().Hana.Target or not getgenv().Hana.Target.Character or getgenv().Hana.Target.Character.Humanoid.Health <= 0 then
-            getgenv().Hana.Target = getClosest()
+local function ApplyESP(p)
+    if not p.Character or not p.Character:FindFirstChild("Head") or p.Character.Head:FindFirstChild("HanaTag") then return end
+    local Billboard = Instance.new("BillboardGui", p.Character.Head); Billboard.Name = "HanaTag"; Billboard.Size = UDim2.new(0, 150, 0, 60); Billboard.StudsOffset = Vector3.new(0, 3, 0); Billboard.AlwaysOnTop = true
+    local Tag = Instance.new("TextLabel", Billboard); Tag.Size = UDim2.new(1, 0, 1, 0); Tag.BackgroundTransparency = 1; Tag.TextColor3 = Color3.fromRGB(0, 255, 100); Tag.TextSize = 12; Tag.Font = "SourceSansBold"; Tag.TextStrokeTransparency = 0.5
+    
+    local conn; conn = RunService.RenderStepped:Connect(function()
+        if not p or not p.Parent or not getgenv().Hana.EspOn then 
+            Billboard.Enabled = false 
+            if not p or not p.Parent then conn:Disconnect(); Billboard:Destroy() end
+            return 
         end
-        local tar = getgenv().Hana.Target
-        if tar and tar.Character:FindFirstChild("HumanoidRootPart") then
-            Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, tar.Character.HumanoidRootPart.Position)
-            
-            -- INFO DISPLAY
-            InfoBox.Visible = true
-            local dist = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - tar.Character.HumanoidRootPart.Position).Magnitude)
-            InfoText.Text = "<b>Target:</b> "..tar.Name.."\n<b>HP:</b> "..math.floor(tar.Character.Humanoid.Health).."\n<b>Dist:</b> "..dist.."m"
-        else InfoBox.Visible = false end
-    else InfoBox.Visible = false end
+        if p.Character and p.Character:FindFirstChild("Humanoid") then
+            Billboard.Enabled = true
+            local dist = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - p.Character.HumanoidRootPart.Position).Magnitude)
+            Tag.Text = string.format("%s [Lv.%s]\nHP: %d | Dist: %dm", p.DisplayName, GetPlayerLevel(p), p.Character.Humanoid.Health, dist)
+        else
+            Billboard.Enabled = false
+        end
+    end)
+end
 
-    -- GHOST HITBOX
+-- [[ LOOPS ]] --
+RunService.RenderStepped:Connect(function()
+    -- Speed Bypass CFrame
+    if getgenv().Hana.SpeedOn and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local hum = LocalPlayer.Character.Humanoid
+        local hrp = LocalPlayer.Character.HumanoidRootPart
+        if hum.MoveDirection.Magnitude > 0 then
+            hrp.CFrame = hrp.CFrame + (hum.MoveDirection * (getgenv().Hana.SpeedVal / 55))
+        end
+    end
+
+    -- Aimlock & Hitbox
+    if getgenv().Hana.AimOn then
+        if not getgenv().Hana.CurrentTarget then
+            local closest, dist = nil, 1000
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                    local pos, onS = Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
+                    if onS then
+                        local m = (Vector2.new(pos.X, pos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
+                        if m < dist then dist = m; closest = p end
+                    end
+                end
+            end
+            getgenv().Hana.CurrentTarget = closest
+        end
+        if getgenv().Hana.CurrentTarget and getgenv().Hana.CurrentTarget.Character then
+            Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, getgenv().Hana.CurrentTarget.Character.HumanoidRootPart.Position)
+        end
+    else getgenv().Hana.CurrentTarget = nil end
+
+    -- Apply Global
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local root = p.Character.HumanoidRootPart
-            if getgenv().Hana.HitOn then
-                root.Size = Vector3.new(getgenv().Hana.HitSize, getgenv().Hana.HitSize, getgenv().Hana.HitSize)
-                root.Transparency = 0.7; root.CanCollide = false
-            else
-                root.Size = Vector3.new(2,2,1); root.Transparency = 1; root.CanCollide = true
-            end
+            p.Character.HumanoidRootPart.Size = getgenv().Hana.HitOn and Vector3.new(getgenv().Hana.HitSize, getgenv().Hana.HitSize, getgenv().Hana.HitSize) or Vector3.new(2,2,1)
+            p.Character.HumanoidRootPart.Transparency = getgenv().Hana.HitOn and 0.8 or 1
+            if getgenv().Hana.EspOn then ApplyESP(p) end
         end
     end
-    
-    if getgenv().Hana.SpeedOn and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        LocalPlayer.Character.Humanoid.WalkSpeed = getgenv().Hana.SpeedVal
-    end
-    JumpBtn.Visible = getgenv().Hana.JumpOn
 end)
 
--- [[ UI ACTION ]] --
-HBtn.MouseButton1Click:Connect(function() Main.Visible = not Main.Visible end)
-TabBtn.MouseButton1Click:Connect(function()
-    L1.Visible = not L1.Visible; L2.Visible = not L2.Visible
-    TabBtn.Text = L1.Visible and "MENU SETTINGS (L2)" or "BACK TO MAIN (L1)"
-end)
-
-JumpBtn.MouseButton1Click:Connect(function()
-    if LocalPlayer.Character and LocalPlayer.Character.Humanoid then
-        LocalPlayer.Character.Humanoid.JumpPower = 120; LocalPlayer.Character.Humanoid:ChangeState(3); task.wait(0.1); LocalPlayer.Character.Humanoid.JumpPower = 50
-    end
-end)
-
-local function AddToggle(name, var, parent)
-    local b = Instance.new("TextButton", parent); b.Size = UDim2.new(0.9,0,0,45); b.Text = name..": OFF"; b.BackgroundColor3 = Color3.fromRGB(40,40,40); b.TextColor3 = Color3.new(1,1,1); Instance.new("UICorner", b)
+-- [[ UI BUILDER ]] --
+local function AddToggle(name, var)
+    local b = Instance.new("TextButton", Container); b.Size = UDim2.new(1,0,0,32); b.Text = name; b.BackgroundColor3 = Color3.fromRGB(25,25,25); b.TextColor3 = Color3.new(1,1,1); b.TextSize = 12; Instance.new("UICorner", b)
     b.MouseButton1Click:Connect(function()
         getgenv().Hana[var] = not getgenv().Hana[var]
-        if var == "AimOn" then getgenv().Hana.Target = nil end
-        b.Text = name..": "..(getgenv().Hana[var] and "ON" or "OFF")
-        b.BackgroundColor3 = getgenv().Hana[var] and Color3.fromRGB(255, 0, 150) or Color3.fromRGB(40,40,40)
+        b.BackgroundColor3 = getgenv().Hana[var] and Color3.fromRGB(150, 0, 255) or Color3.fromRGB(25,25,25)
     end)
 end
 
-local function AddSlider(name, var, step, max, parent)
-    local f = Instance.new("Frame", parent); f.Size = UDim2.new(0.9,0,0,55); f.BackgroundTransparency = 1
-    local l = Instance.new("TextLabel", f); l.Size = UDim2.new(1,0,0.4,0); l.Text = name..": "..getgenv().Hana[var]; l.TextColor3 = Color3.new(1,1,1); l.BackgroundTransparency = 1
-    local b = Instance.new("TextButton", f); b.Size = UDim2.new(1,0,0.5,0); b.Position = UDim2.new(0,0,0.4,0); b.Text = "Adjust Value (+ "..step..")"; b.BackgroundColor3 = Color3.fromRGB(60,60,60); b.TextColor3 = Color3.new(1,1,1); Instance.new("UICorner", b)
-    b.MouseButton1Click:Connect(function()
-        getgenv().Hana[var] = getgenv().Hana[var] + step
-        if getgenv().Hana[var] > max then getgenv().Hana[var] = step end
-        l.Text = name..": "..getgenv().Hana[var]
+local function AddSlider(name, var, min, max)
+    local f = Instance.new("Frame", Container); f.Size = UDim2.new(1,0,0,38); f.BackgroundTransparency = 1
+    local l = Instance.new("TextLabel", f); l.Size = UDim2.new(1,0,0,15); l.Text = name..": "..getgenv().Hana[var]; l.TextColor3 = Color3.new(1,1,1); l.TextSize = 11; l.BackgroundTransparency = 1
+    local b = Instance.new("TextButton", f); b.Size = UDim2.new(0.9,0,0,8); b.Position = UDim2.new(0.05,0,0.6,0); b.Text = ""; b.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    local fill = Instance.new("Frame", b); fill.Size = UDim2.new((getgenv().Hana[var]-min)/(max-min), 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(150, 0, 255)
+    
+    b.MouseButton1Down:Connect(function()
+        local move = UserInputService.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+                local pos = math.clamp((input.Position.X - b.AbsolutePosition.X) / b.AbsoluteSize.X, 0, 1)
+                fill.Size = UDim2.new(pos, 0, 1, 0); local val = math.floor(min + (pos * (max - min)))
+                getgenv().Hana[var] = val; l.Text = name..": "..val
+            end
+        end)
+        UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then move:Disconnect() end end)
     end)
 end
 
-AddToggle("STICKY AIMLOCK", "AimOn", L1)
-AddToggle("GHOST HITBOX", "HitOn", L1)
-AddToggle("SPEED BOOST", "SpeedOn", L1)
-AddToggle("TOMBOL JUMP", "JumpOn", L1)
-
-AddSlider("Hitbox Size", "HitSize", 5, 50, L2)
-AddSlider("Walk Speed", "SpeedVal", 20, 250, L2)
+AddToggle("LOYAL AIMLOCK", "AimOn")
+AddToggle("GHOST HITBOX", "HitOn")
+AddSlider("Hitbox Size", "HitSize", 2, 50)
+AddToggle("INFO ESP (GREEN)", "EspOn")
+AddToggle("ANTI-STUN", "AntiStun")
+AddToggle("POWER SPEED", "SpeedOn")
+AddSlider("Speed Value", "SpeedVal", 10, 350)
