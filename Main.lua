@@ -1,4 +1,4 @@
--- [[ HANA HUB: V29.0 - PROFILE AT TOP ]] --
+-- [[ HANA HUB: V29.0 - FIXED VERSION ]] --
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -37,7 +37,7 @@ local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 220, 0, 
 local Stroke = Instance.new("UIStroke", Main); Stroke.Color = Color3.fromRGB(150, 0, 255); Stroke.Thickness = 2
 MakeDraggable(Main)
 
--- [[ PROFILE SECTION (AT TOP) ]] --
+-- [[ PROFILE SECTION ]] --
 local ProfileFrame = Instance.new("Frame", Main); ProfileFrame.Size = UDim2.new(1, 0, 0, 60); ProfileFrame.BackgroundTransparency = 1
 local PImg = Instance.new("ImageLabel", ProfileFrame); PImg.Size = UDim2.new(0, 40, 0, 40); PImg.Position = UDim2.new(0, 10, 0, 10); PImg.Image = "rbxthumb://type=AvatarHeadShot&id="..LocalPlayer.UserId.."&w=150&h=150"; Instance.new("UICorner", PImg).CornerRadius = UDim.new(1,0)
 local PName = Instance.new("TextLabel", ProfileFrame); PName.Size = UDim2.new(0.6, 0, 0.5, 0); PName.Position = UDim2.new(0, 55, 0, 10); PName.Text = LocalPlayer.DisplayName; PName.TextColor3 = Color3.new(1,1,1); PName.TextXAlignment = "Left"; PName.BackgroundTransparency = 1; PName.Font = "SourceSansBold"; PName.TextSize = 14
@@ -49,7 +49,7 @@ local Line = Instance.new("Frame", Main); Line.Size = UDim2.new(0.9, 0, 0, 1); L
 local Container = Instance.new("ScrollingFrame", Main); Container.Size = UDim2.new(0.9, 0, 0.72, 0); Container.Position = UDim2.new(0.05, 0, 0.2, 0); Container.BackgroundTransparency = 1; Container.ScrollBarThickness = 0
 local Layout = Instance.new("UIListLayout", Container); Layout.Padding = UDim.new(0, 6); Layout.HorizontalAlignment = "Center"
 
--- [[ LOGO π ]] --
+-- [[ LOGO TOGGLE ]] --
 local HBtn = Instance.new("TextButton", ScreenGui); HBtn.Size = UDim2.new(0, 45, 0, 45); HBtn.Position = UDim2.new(0, 20, 0.5, -22); HBtn.Text = "π"; HBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0); HBtn.TextColor3 = Color3.new(1,1,1); HBtn.TextSize = 25; Instance.new("UICorner", HBtn).CornerRadius = UDim.new(1,0)
 Instance.new("UIStroke", HBtn).Color = Color3.fromRGB(150, 0, 255)
 MakeDraggable(HBtn)
@@ -89,9 +89,19 @@ local function ApplyESP(p)
     end)
 end
 
--- [[ LOOPS ]] --
+-- [[ MAIN LOOP ]] --
 RunService.RenderStepped:Connect(function()
-    -- Speed Bypass CFrame
+    -- ANTI-STUN LOGIC (FIXED)
+    if getgenv().Hana.AntiStun then
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChild("Humanoid")
+        if hum then
+            if hum.PlatformStand then hum.PlatformStand = false end
+            if hum.Sit then hum.Sit = false end
+        end
+    end
+
+    -- Speed Bypass
     if getgenv().Hana.SpeedOn and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local hum = LocalPlayer.Character.Humanoid
         local hrp = LocalPlayer.Character.HumanoidRootPart
@@ -100,7 +110,19 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- Aimlock & Hitbox
+    -- Aimlock & Hitbox Logic
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            -- Hitbox (FIXED RANGE)
+            p.Character.HumanoidRootPart.Size = getgenv().Hana.HitOn and Vector3.new(getgenv().Hana.HitSize, getgenv().Hana.HitSize, getgenv().Hana.HitSize) or Vector3.new(2,2,1)
+            p.Character.HumanoidRootPart.Transparency = getgenv().Hana.HitOn and 0.8 or 1
+            p.Character.HumanoidRootPart.CanCollide = true -- Biar hitbox nggak tembus lantai
+            
+            if getgenv().Hana.EspOn then ApplyESP(p) end
+        end
+    end
+
+    -- Aimlock logic
     if getgenv().Hana.AimOn then
         if not getgenv().Hana.CurrentTarget then
             local closest, dist = nil, 1000
@@ -119,15 +141,6 @@ RunService.RenderStepped:Connect(function()
             Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, getgenv().Hana.CurrentTarget.Character.HumanoidRootPart.Position)
         end
     else getgenv().Hana.CurrentTarget = nil end
-
-    -- Apply Global
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            p.Character.HumanoidRootPart.Size = getgenv().Hana.HitOn and Vector3.new(getgenv().Hana.HitSize, getgenv().Hana.HitSize, getgenv().Hana.HitSize) or Vector3.new(2,2,1)
-            p.Character.HumanoidRootPart.Transparency = getgenv().Hana.HitOn and 0.8 or 1
-            if getgenv().Hana.EspOn then ApplyESP(p) end
-        end
-    end
 end)
 
 -- [[ UI BUILDER ]] --
@@ -159,8 +172,8 @@ end
 
 AddToggle("LOYAL AIMLOCK", "AimOn")
 AddToggle("GHOST HITBOX", "HitOn")
-AddSlider("Hitbox Size", "HitSize", 2, 50)
+AddSlider("Hitbox Size", "HitSize", 2, 300) -- DARI 50 GUE NAIKIN KE 300
 AddToggle("INFO ESP (GREEN)", "EspOn")
-AddToggle("ANTI-STUN", "AntiStun")
+AddToggle("ANTI-STUN", "AntiStun") -- SEKARANG UDAH WORK
 AddToggle("POWER SPEED", "SpeedOn")
 AddSlider("Speed Value", "SpeedVal", 10, 350)
