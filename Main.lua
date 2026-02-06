@@ -8,9 +8,17 @@ local Camera = workspace.CurrentCamera
 -- [[ CONFIGURATION ]] --
 local MY_USER_ID = LocalPlayer.UserId -- Otomatis deteksi ID kamu, atau ganti dengan ID spesifik
 getgenv().Xyara = {
-    AimOn = false, HitOn = false, SpeedOn = false, EspOn = false,
-    HitSize = 15, SpeedVal = 80,
-    CurrentTarget = nil
+    AimOn = false, 
+    HitOn = false, 
+    SpeedOn = false, 
+    EspOn = false,
+    HitSize = 15, 
+    SpeedVal = 80,
+    CurrentTarget = nil,
+    Smoothness = 0.2, -- Smoothness aim lock
+    AimFOV = 80, -- Field of View untuk lock-on
+    Locked = false, -- Status lock
+    AimPart = "HumanoidRootPart" -- Bisa ganti: "Head", "UpperTorso"
 }
 
 -- [[ UI CLEANUP ]] --
@@ -35,7 +43,7 @@ local function MakeDraggable(obj)
 end
 
 -- [[ MAIN UI ]] --
-local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 400, 0, 280); Main.Position = UDim2.new(0.5, -200, 0.5, -140); Main.BackgroundColor3 = Color3.fromRGB(10, 10, 10); Main.BackgroundTransparency = 0.1; Main.Visible = false; Instance.new("UICorner", Main)
+local Main = Instance.new("Frame", ScreenGui); Main.Size = UDim2.new(0, 400, 0, 320); Main.Position = UDim2.new(0.5, -200, 0.5, -160); Main.BackgroundColor3 = Color3.fromRGB(10, 10, 10); Main.BackgroundTransparency = 0.1; Main.Visible = false; Instance.new("UICorner", Main)
 local Stroke = Instance.new("UIStroke", Main); Stroke.Color = Color3.fromRGB(150, 0, 255); Stroke.Thickness = 2
 MakeDraggable(Main)
 
@@ -57,7 +65,11 @@ local Sidebar = Instance.new("Frame", Main); Sidebar.Size = UDim2.new(0, 100, 1,
 local Layout = Instance.new("UIListLayout", Sidebar); Layout.Padding = UDim.new(0, 5)
 
 local Content = Instance.new("Frame", Main); Content.Size = UDim2.new(1, -130, 1, -80); Content.Position = UDim2.new(0, 120, 0, 70); Content.BackgroundTransparency = 1
-local Tabs = {Combat = Instance.new("ScrollingFrame", Content), Speed = Instance.new("ScrollingFrame", Content), Setting = Instance.new("ScrollingFrame", Content)}
+local Tabs = {
+    Combat = Instance.new("ScrollingFrame", Content), 
+    Speed = Instance.new("ScrollingFrame", Content), 
+    Setting = Instance.new("ScrollingFrame", Content)
+}
 
 for name, frame in pairs(Tabs) do
     frame.Size = UDim2.new(1, 0, 1, 0); frame.BackgroundTransparency = 1; frame.Visible = false; frame.ScrollBarThickness = 0
@@ -96,8 +108,40 @@ local function ApplyESP(p)
     end)
 end
 
+-- [[ AIM LOCK FIXED SYSTEM ]] --
+local function GetClosestTarget()
+    local closest, dist = nil, getgenv().Xyara.AimFOV
+    
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") 
+           and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+            
+            local targetPos = p.Character.HumanoidRootPart.Position
+            local cameraPos = Camera.CFrame.Position
+            local distance = (targetPos - cameraPos).Magnitude
+            
+            -- Cek apakah target dalam jangkauan
+            local direction = (targetPos - cameraPos).Unit
+            local lookVector = Camera.CFrame.LookVector
+            local dot = direction:Dot(lookVector)
+            local angle = math.deg(math.acos(dot))
+            
+            -- Target harus di depan kamera (angle kecil)
+            if angle < getgenv().Xyara.AimFOV / 2 and distance < dist then
+                dist = distance
+                closest = p
+            end
+        end
+    end
+    
+    return closest
+end
+
+local lastTargetSwitch = tick()
+
 -- [[ MAIN LOOP ]] --
 RunService.RenderStepped:Connect(function()
+    -- Speed Hack
     if getgenv().Xyara.SpeedOn and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local hum = LocalPlayer.Character.Humanoid
         if hum.MoveDirection.Magnitude > 0 then
@@ -105,6 +149,7 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
+    -- Hitbox Expander & ESP
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
             p.Character.HumanoidRootPart.Size = getgenv().Xyara.HitOn and Vector3.new(getgenv().Xyara.HitSize, getgenv().Xyara.HitSize, getgenv().Xyara.HitSize) or Vector3.new(2,2,1)
@@ -113,18 +158,57 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
+    -- AIM LOCK FIXED VERSION
     if getgenv().Xyara.AimOn then
-        local closest, dist = nil, 1000
-        for _, p in pairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                local pos, onS = Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
-                if onS then
-                    local m = (Vector2.new(pos.X, pos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
-                    if m < dist then dist = m; closest = p end
+        -- Jika sudah ada target yang di-lock
+        if getgenv().Xyara.CurrentTarget and getgenv().Xyara.Locked then
+            local target = getgenv().Xyara.CurrentTarget
+            
+            -- Cek apakah target masih valid
+            if target and target.Character and target.Character:FindFirstChild(getgenv().Xyara.AimPart) 
+               and target.Character:FindFirstChild("Humanoid") and target.Character.Humanoid.Health > 0 then
+                
+                local aimPart = target.Character[getgenv().Xyara.AimPart]
+                
+                -- SUPER LOCK: Camera selalu nempel ke target
+                local targetPosition = aimPart.Position
+                
+                -- Prediksi pergerakan jika target bergerak
+                if aimPart:IsA("BasePart") and aimPart.Velocity.Magnitude > 5 then
+                    targetPosition = targetPosition + (aimPart.Velocity * 0.1)
+                end
+                
+                -- Tambah offset untuk view yang lebih bagus
+                targetPosition = targetPosition + Vector3.new(0, 1.5, 0)
+                
+                -- Smooth camera movement
+                local currentCFrame = Camera.CFrame
+                local lookVector = (targetPosition - currentCFrame.Position).Unit
+                local smoothFactor = getgenv().Xyara.Smoothness * 3
+                local newLookVector = currentCFrame.LookVector:Lerp(lookVector, smoothFactor)
+                
+                Camera.CFrame = CFrame.lookAt(currentCFrame.Position, currentCFrame.Position + newLookVector)
+                
+            else
+                -- Target mati/hilang, release lock
+                getgenv().Xyara.Locked = false
+                getgenv().Xyara.CurrentTarget = nil
+            end
+        else
+            -- Cari target baru (cooldown 0.3 detik untuk ganti target)
+            if tick() - lastTargetSwitch > 0.3 then
+                local closest = GetClosestTarget()
+                if closest then
+                    getgenv().Xyara.CurrentTarget = closest
+                    getgenv().Xyara.Locked = true
+                    lastTargetSwitch = tick()
                 end
             end
         end
-        if closest then Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, closest.Character.HumanoidRootPart.Position) end
+    else
+        -- Reset jika aim dimatikan
+        getgenv().Xyara.Locked = false
+        getgenv().Xyara.CurrentTarget = nil
     end
 end)
 
@@ -160,14 +244,70 @@ local function CreateTabBtn(name)
     b.MouseButton1Click:Connect(function() ShowTab(name) end)
 end
 
--- SETUP
+-- SETUP TABS
 CreateTabBtn("Combat"); CreateTabBtn("Speed"); CreateTabBtn("Setting")
+
+-- COMBAT TAB
 AddToggle(Tabs.Combat, "AIM LOCK", "AimOn")
 AddToggle(Tabs.Combat, "HITBOX EXPANDER", "HitOn")
+AddSlider(Tabs.Combat, "Aim Smoothness", "Smoothness", 0.01, 1)
+AddSlider(Tabs.Combat, "Aim FOV", "AimFOV", 10, 180)
+
+-- Tombol untuk toggle lock target
+local lockBtn = Instance.new("TextButton", Tabs.Combat)
+lockBtn.Size = UDim2.new(1, 0, 0, 32)
+lockBtn.Text = "LOCK CURRENT TARGET"
+lockBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+lockBtn.TextColor3 = Color3.new(1,1,1)
+lockBtn.TextSize = 12
+Instance.new("UICorner", lockBtn)
+
+lockBtn.MouseButton1Click:Connect(function()
+    if getgenv().Xyara.CurrentTarget then
+        getgenv().Xyara.Locked = not getgenv().Xyara.Locked
+        lockBtn.BackgroundColor3 = getgenv().Xyara.Locked and Color3.fromRGB(255, 0, 100) or Color3.fromRGB(25, 25, 25)
+        lockBtn.Text = getgenv().Xyara.Locked and "UNLOCK TARGET" or "LOCK CURRENT TARGET"
+    end
+end)
+
+-- SPEED TAB
 AddToggle(Tabs.Speed, "POWER SPEED", "SpeedOn")
+AddSlider(Tabs.Speed, "Speed Value", "SpeedVal", 16, 350)
+
+-- SETTING TAB
 AddToggle(Tabs.Setting, "INFO ESP (GREEN)", "EspOn")
 AddSlider(Tabs.Setting, "Hitbox Size", "HitSize", 2, 300)
-AddSlider(Tabs.Setting, "Speed Value", "SpeedVal", 16, 350)
+
+-- Select Aim Part
+local aimPartFrame = Instance.new("Frame", Tabs.Combat)
+aimPartFrame.Size = UDim2.new(1, 0, 0, 32)
+aimPartFrame.BackgroundTransparency = 1
+
+local aimPartLabel = Instance.new("TextLabel", aimPartFrame)
+aimPartLabel.Size = UDim2.new(0.5, 0, 1, 0)
+aimPartLabel.Text = "Aim Part:"
+aimPartLabel.TextColor3 = Color3.new(1,1,1)
+aimPartLabel.BackgroundTransparency = 1
+aimPartLabel.TextSize = 12
+
+local aimPartDropdown = Instance.new("TextButton", aimPartFrame)
+aimPartDropdown.Size = UDim2.new(0.5, 0, 1, 0)
+aimPartDropdown.Position = UDim2.new(0.5, 0, 0, 0)
+aimPartDropdown.Text = getgenv().Xyara.AimPart
+aimPartDropdown.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+aimPartDropdown.TextColor3 = Color3.new(1,1,1)
+aimPartDropdown.TextSize = 12
+Instance.new("UICorner", aimPartDropdown)
+
+aimPartDropdown.MouseButton1Click:Connect(function()
+    -- Toggle antara Head dan HumanoidRootPart
+    if getgenv().Xyara.AimPart == "HumanoidRootPart" then
+        getgenv().Xyara.AimPart = "Head"
+    else
+        getgenv().Xyara.AimPart = "HumanoidRootPart"
+    end
+    aimPartDropdown.Text = getgenv().Xyara.AimPart
+end)
 
 -- [[ PI LOGO TOGGLE ]] --
 local HBtn = Instance.new("TextButton", ScreenGui); HBtn.Size = UDim2.new(0, 50, 0, 50); HBtn.Position = UDim2.new(0, 20, 0.5, -25); HBtn.Text = "π"; HBtn.BackgroundColor3 = Color3.fromRGB(10, 10, 10); HBtn.TextColor3 = Color3.new(1,1,1); HBtn.TextSize = 30; Instance.new("UICorner", HBtn).CornerRadius = UDim.new(1,0)
@@ -176,3 +316,34 @@ MakeDraggable(HBtn)
 HBtn.MouseButton1Click:Connect(function() Main.Visible = not Main.Visible end)
 
 ShowTab("Combat")
+
+-- [[ HOTKEYS ]] --
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    -- F untuk toggle Aim Lock
+    if input.KeyCode == Enum.KeyCode.F then
+        getgenv().Xyara.AimOn = not getgenv().Xyara.AimOn
+    end
+    
+    -- Q untuk toggle Speed
+    if input.KeyCode == Enum.KeyCode.Q then
+        getgenv().Xyara.SpeedOn = not getgenv().Xyara.SpeedOn
+    end
+    
+    -- G untuk force lock/unlock target
+    if input.KeyCode == Enum.KeyCode.G then
+        if getgenv().Xyara.CurrentTarget then
+            getgenv().Xyara.Locked = not getgenv().Xyara.Locked
+        else
+            -- Cari target terdekat
+            local closest = GetClosestTarget()
+            if closest then
+                getgenv().Xyara.CurrentTarget = closest
+                getgenv().Xyara.Locked = true
+            end
+        end
+    end
+end)
+
+print("XYARA HUB V30.2 LOADED! | F = Aim | Q = Speed | G = Lock Target")
