@@ -2,6 +2,8 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
@@ -14,7 +16,13 @@ getgenv().Xyara = {
     AimPart = "HumanoidRootPart", Flying = false,
     FlySpeedMode = "Normal", TPSpawnPoint = nil,
     IsTeleporting = false, TeamCheck = true,
-    WallCheck = false, MaxAimDistance = 500
+    WallCheck = false, MaxAimDistance = 500,
+    -- FITUR BARU
+    InfJump = false,
+    NoClip = false,
+    GodMode = false,
+    AirWalk = false,
+    FullBright = false
 }
 
 local SpeedValues = {Normal = 80, Fast = 200, Extreme = 800, Insane = 2000}
@@ -25,6 +33,7 @@ local lastTargetSwitch = tick()
 local BV, BG = Instance.new("BodyVelocity"), Instance.new("BodyGyro")
 BV.MaxForce, BG.MaxTorque = Vector3.new(0,0,0), Vector3.new(0,0,0)
 BG.P = 12000
+local AirWalkPart = nil
 
 pcall(function() if game.CoreGui:FindFirstChild("XyaraHub") then game.CoreGui.XyaraHub:Destroy() end end)
 
@@ -53,8 +62,8 @@ local function MakeDraggable(obj)
 end
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 400, 0, 320)
-Main.Position = UDim2.new(0.5, -200, 0.5, -160)
+Main.Size = UDim2.new(0, 400, 0, 350)
+Main.Position = UDim2.new(0.5, -200, 0.5, -175)
 Main.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
 Main.BackgroundTransparency = 0.1
 Main.Visible = false
@@ -93,7 +102,7 @@ PStatus.TextXAlignment = Enum.TextXAlignment.Left
 PStatus.BackgroundTransparency = 1
 PStatus.Font = Enum.Font.SourceSans
 PStatus.TextSize = 11
-PStatus.Text = "XYARA HUB"
+PStatus.Text = "XYARA HUB V33"
 PStatus.TextColor3 = Color3.fromRGB(150, 0, 255)
 
 local Sidebar = Instance.new("Frame", Main)
@@ -108,7 +117,7 @@ Content.Position = UDim2.new(0, 120, 0, 70)
 Content.BackgroundTransparency = 1
 
 local Tabs = {}
-local tabNames = {"Combat", "Fly", "Teleport", "Settings", "Extra"}
+local tabNames = {"Combat", "Movement", "Teleport", "Visual", "Extra"}
 for _, name in ipairs(tabNames) do
     local tab = Instance.new("ScrollingFrame", Content)
     tab.Size = UDim2.new(1, 0, 1, 0)
@@ -122,12 +131,107 @@ end
 
 local function ShowTab(name) for n, t in pairs(Tabs) do t.Visible = (n == name) end end
 
+-- FIXED SLIDER
+local SliderRefs = {}
+local function AddSlider(parent, name, var, min, max)
+    local frame = Instance.new("Frame", parent)
+    frame.Size = UDim2.new(1, -10, 0, 50)
+    frame.Position = UDim2.new(0, 5, 0, 0)
+    frame.BackgroundTransparency = 1
+    frame.BorderSizePixel = 0
+    
+    local label = Instance.new("TextLabel", frame)
+    label.Size = UDim2.new(1, 0, 0, 20)
+    label.Position = UDim2.new(0, 0, 0, 0)
+    label.Text = name..": "..tostring(getgenv().Xyara[var])
+    label.TextColor3 = Color3.new(1, 1, 1)
+    label.TextSize = 12
+    label.BackgroundTransparency = 1
+    label.Font = Enum.Font.SourceSansBold
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local track = Instance.new("Frame", frame)
+    track.Name = "Track"
+    track.Size = UDim2.new(1, 0, 0, 10)
+    track.Position = UDim2.new(0, 0, 0, 28)
+    track.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    track.BorderSizePixel = 0
+    Instance.new("UICorner", track).CornerRadius = UDim.new(0, 5)
+    
+    local fill = Instance.new("Frame", track)
+    fill.Name = "Fill"
+    fill.Size = UDim2.new((getgenv().Xyara[var] - min) / (max - min), 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(150, 0, 255)
+    fill.BorderSizePixel = 0
+    Instance.new("UICorner", fill).CornerRadius = UDim.new(0, 5)
+    
+    local knob = Instance.new("Frame", track)
+    knob.Name = "Knob"
+    knob.Size = UDim2.new(0, 16, 0, 16)
+    knob.Position = UDim2.new((getgenv().Xyara[var] - min) / (max - min), -8, 0.5, -8)
+    knob.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+    knob.BorderSizePixel = 0
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+    
+    local button = Instance.new("TextButton", track)
+    button.Name = "ClickArea"
+    button.Size = UDim2.new(1, 0, 1, 0)
+    button.BackgroundTransparency = 1
+    button.Text = ""
+    
+    local dragging = false
+    
+    local function update(input)
+        local trackAbs = track.AbsolutePosition.X
+        local trackSize = track.AbsoluteSize.X
+        local mouseX = input.Position.X
+        
+        local scale = math.clamp((mouseX - trackAbs) / trackSize, 0, 1)
+        local val = min + (scale * (max - min))
+        
+        if max - min > 100 then
+            val = math.floor(val)
+        else
+            val = math.floor(val * 100) / 100
+        end
+        
+        getgenv().Xyara[var] = val
+        fill.Size = UDim2.new(scale, 0, 1, 0)
+        knob.Position = UDim2.new(scale, -8, 0.5, -8)
+        label.Text = name..": "..tostring(val)
+    end
+    
+    button.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            update(input)
+        end
+    end)
+    
+    local moveConn = UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            update(input)
+        end
+    end)
+    
+    local endConn = UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    
+    table.insert(ActiveConnections, moveConn)
+    table.insert(ActiveConnections, endConn)
+    
+    SliderRefs[var] = {Frame = frame, Label = label, Fill = fill, Knob = knob, Min = min, Max = max}
+end
+
 local function AddToggle(parent, name, var)
     local btn = Instance.new("TextButton", parent)
     btn.Size = UDim2.new(1, -10, 0, 32)
     btn.Position = UDim2.new(0, 5, 0, 0)
     btn.Text = name
-    btn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    btn.BackgroundColor3 = getgenv().Xyara[var] and Color3.fromRGB(150, 0, 255) or Color3.fromRGB(25, 25, 25)
     btn.TextColor3 = Color3.new(1, 1, 1)
     btn.TextSize = 12
     btn.Font = Enum.Font.SourceSans
@@ -137,49 +241,6 @@ local function AddToggle(parent, name, var)
         btn.BackgroundColor3 = getgenv().Xyara[var] and Color3.fromRGB(150, 0, 255) or Color3.fromRGB(25, 25, 25)
     end)
     return btn
-end
-
-local function AddSlider(parent, name, var, min, max)
-    local frame = Instance.new("Frame", parent)
-    frame.Size = UDim2.new(1, -10, 0, 45)
-    frame.Position = UDim2.new(0, 5, 0, 0)
-    frame.BackgroundTransparency = 1
-    
-    local label = Instance.new("TextLabel", frame)
-    label.Size = UDim2.new(1, 0, 0, 15)
-    label.Text = name..": "..tostring(getgenv().Xyara[var])
-    label.TextColor3 = Color3.new(1, 1, 1)
-    label.TextSize = 11
-    label.BackgroundTransparency = 1
-    label.Font = Enum.Font.SourceSans
-    
-    local button = Instance.new("TextButton", frame)
-    button.Size = UDim2.new(0.9, 0, 0, 8)
-    button.Position = UDim2.new(0.05, 0, 0.55, 0)
-    button.Text = ""
-    button.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    button.AutoButtonColor = false
-    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 4)
-    
-    local fill = Instance.new("Frame", button)
-    fill.Size = UDim2.new((getgenv().Xyara[var] - min) / (max - min), 0, 1, 0)
-    fill.BackgroundColor3 = Color3.fromRGB(150, 0, 255)
-    fill.BorderSizePixel = 0
-    Instance.new("UICorner", fill).CornerRadius = UDim.new(0, 4)
-    
-    local dragging = false
-    local function update(input)
-        local pos = math.clamp((input.Position.X - button.AbsolutePosition.X) / button.AbsoluteSize.X, 0, 1)
-        local val = min + (pos * (max - min))
-        val = (max - min > 100) and math.floor(val) or math.floor(val * 100) / 100
-        getgenv().Xyara[var] = val
-        fill.Size = UDim2.new(pos, 0, 1, 0)
-        label.Text = name..": "..tostring(val)
-    end
-    
-    button.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true; update(input) end end)
-    table.insert(ActiveConnections, UserInputService.InputChanged:Connect(function(input) if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then update(input) end end))
-    table.insert(ActiveConnections, UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end))
 end
 
 local function AddButton(parent, name, callback)
@@ -209,6 +270,7 @@ end
 
 for _, name in ipairs(tabNames) do CreateTabBtn(name) end
 
+-- COMBAT TAB
 AddToggle(Tabs.Combat, "AIM LOCK", "AimOn")
 AddToggle(Tabs.Combat, "HITBOX EXPAND", "HitOn")
 AddToggle(Tabs.Combat, "TEAM CHECK", "TeamCheck")
@@ -234,31 +296,41 @@ local aimPartBtn = AddButton(Tabs.Combat, "AIM: BODY", function()
     end
 end)
 
-AddToggle(Tabs.Fly, "FLIGHT", "Flying")
-local flyModeBtn = AddButton(Tabs.Fly, "SPEED: Normal", function()
+-- MOVEMENT TAB (BARU)
+AddToggle(Tabs.Movement, "FLIGHT", "Flying")
+local flyModeBtn = AddButton(Tabs.Movement, "FLY SPEED: Normal", function()
     local modes = {"Normal", "Fast", "Extreme", "Insane"}
     local current = getgenv().Xyara.FlySpeedMode
     local nextIdx = 1
     for i, m in ipairs(modes) do if m == current then nextIdx = (i % #modes) + 1; break end end
     getgenv().Xyara.FlySpeedMode = modes[nextIdx]
-    flyModeBtn.Text = "SPEED: "..modes[nextIdx]
+    flyModeBtn.Text = "FLY SPEED: "..modes[nextIdx]
 end)
 
+AddToggle(Tabs.Movement, "SPEED", "SpeedOn")
+AddSlider(Tabs.Movement, "Speed Value", "SpeedVal", 16, 500)
+
+-- FITUR BARU MOVEMENT
+AddToggle(Tabs.Movement, "INFINITE JUMP", "InfJump")
+AddToggle(Tabs.Movement, "NO CLIP", "NoClip")
+AddToggle(Tabs.Movement, "GOD MODE", "GodMode")
+AddToggle(Tabs.Movement, "AIR WALK", "AirWalk")
+
+-- TELEPORT TAB
 AddButton(Tabs.Teleport, "SET SPAWN", function()
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         getgenv().Xyara.TPSpawnPoint = LocalPlayer.Character.HumanoidRootPart.CFrame
     end
 end)
 
-AddButton(Tabs.Teleport, "TP SPAWN (INSTANT)", function()
-    if getgenv().Xyara.IsTeleporting or not getgenv().Xyara.TPSpawnPoint or not LocalPlayer.Character then return end
+AddButton(Tabs.Teleport, "TP SPAWN", function()
+    if not getgenv().Xyara.TPSpawnPoint or not LocalPlayer.Character then return end
     local root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    root.CFrame = getgenv().Xyara.TPSpawnPoint -- INSTANT
+    if root then root.CFrame = getgenv().Xyara.TPSpawnPoint end
 end)
 
-AddButton(Tabs.Teleport, "TP ENEMY (INSTANT)", function()
-    if getgenv().Xyara.IsTeleporting or not LocalPlayer.Character then return end
+AddButton(Tabs.Teleport, "TP ENEMY", function()
+    if not LocalPlayer.Character then return end
     local myRoot = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not myRoot then return end
     local closest, minDist = nil, math.huge
@@ -271,16 +343,15 @@ AddButton(Tabs.Teleport, "TP ENEMY (INSTANT)", function()
             end
         end
     end
-    if closest then
-        myRoot.CFrame = closest.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 5) -- INSTANT
-    end
+    if closest then myRoot.CFrame = closest.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 5) end
 end)
 
-AddToggle(Tabs.Settings, "SPEED", "SpeedOn")
-AddSlider(Tabs.Settings, "Speed", "SpeedVal", 16, 350)
-AddToggle(Tabs.Settings, "ESP", "EspOn")
-AddSlider(Tabs.Settings, "Hitbox", "HitSize", 2, 300)
+-- VISUAL TAB (BARU)
+AddToggle(Tabs.Visual, "ESP", "EspOn")
+AddSlider(Tabs.Visual, "Hitbox Size", "HitSize", 2, 300)
+AddToggle(Tabs.Visual, "FULL BRIGHT", "FullBright")
 
+-- EXTRA TAB
 AddButton(Tabs.Extra, "REJOIN", function() game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer) end)
 AddButton(Tabs.Extra, "SERVER HOP", function()
     local HttpService = game:GetService("HttpService")
@@ -296,6 +367,8 @@ AddButton(Tabs.Extra, "DESTROY", function()
     ScreenGui:Destroy()
     for _, c in pairs(ActiveConnections) do pcall(function() c:Disconnect() end) end
     for p, _ in pairs(ESPObjects) do pcall(function() if ESPObjects[p].Billboard then ESPObjects[p].Billboard:Destroy() end end) end
+    if AirWalkPart then AirWalkPart:Destroy() end
+    BV:Destroy(); BG:Destroy()
     getgenv().Xyara = nil
 end)
 
@@ -308,13 +381,20 @@ ToggleBtn.TextColor3 = Color3.new(1, 1, 1)
 ToggleBtn.TextSize = 30
 ToggleBtn.Font = Enum.Font.SourceSansBold
 Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
-local ts = Instance.new("UIStroke", ToggleBtn)
-ts.Color = Color3.fromRGB(150, 0, 255)
-ts.Thickness = 2
+local tst = Instance.new("UIStroke", ToggleBtn)
+tst.Color = Color3.fromRGB(150, 0, 255)
+tst.Thickness = 2
 MakeDraggable(ToggleBtn)
 ToggleBtn.MouseButton1Click:Connect(function() Main.Visible = not Main.Visible end)
 
 ShowTab("Combat")
+
+-- ANTI AFK
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+end)
 
 local function IsEnemy(p) if not getgenv().Xyara.TeamCheck then return true end; if not LocalPlayer.Team then return true end; return p.Team ~= LocalPlayer.Team end
 local function IsVisible(part) if not getgenv().Xyara.WallCheck then return true end; if not part then return false end; local r = RaycastParams.new(); r.FilterDescendantsInstances = {LocalPlayer.Character, part.Parent}; r.FilterType = Enum.RaycastFilterType.Blacklist; return workspace:Raycast(Camera.CFrame.Position, (part.Position - Camera.CFrame.Position).Unit * 1000, r) == nil end
@@ -346,7 +426,21 @@ local function ApplyESP(p)
 end
 
 Players.PlayerRemoving:Connect(function(p) RemoveESP(p) end)
-LocalPlayer.CharacterAdded:Connect(function() for p, _ in pairs(ESPObjects) do RemoveESP(p) end; getgenv().Xyara.CurrentTarget = nil; getgenv().Xyara.Locked = false end)
+LocalPlayer.CharacterAdded:Connect(function() 
+    for p, _ in pairs(ESPObjects) do RemoveESP(p) end
+    getgenv().Xyara.CurrentTarget = nil
+    getgenv().Xyara.Locked = false
+    -- RECREATE AIRWALK PART
+    if getgenv().Xyara.AirWalk and not AirWalkPart then
+        task.wait(1)
+        AirWalkPart = Instance.new("Part")
+        AirWalkPart.Size = Vector3.new(10, 1, 10)
+        AirWalkPart.Anchored = true
+        AirWalkPart.CanCollide = true
+        AirWalkPart.Transparency = 1
+        AirWalkPart.Parent = workspace
+    end
+end)
 
 local function GetClosestTarget()
     local closest, dist = nil, getgenv().Xyara.MaxAimDistance
@@ -366,13 +460,16 @@ local function GetClosestTarget()
     return closest
 end
 
+-- MAIN LOOP
 table.insert(ActiveConnections, RunService.RenderStepped:Connect(function()
+    -- SPEED
     if getgenv().Xyara.SpeedOn and LocalPlayer.Character then
         local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
         local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if hum and hrp and hum.MoveDirection.Magnitude > 0 then hrp.CFrame = hrp.CFrame + (hum.MoveDirection * getgenv().Xyara.SpeedVal * 0.016) end
     end
     
+        -- HITBOX
     if lastHitState ~= getgenv().Xyara.HitOn then
         lastHitState = getgenv().Xyara.HitOn
         for _, p in pairs(Players:GetPlayers()) do
@@ -384,41 +481,65 @@ table.insert(ActiveConnections, RunService.RenderStepped:Connect(function()
         end
     end
     
+    -- ESP
     if getgenv().Xyara.EspOn then
         for _, p in pairs(Players:GetPlayers()) do if p ~= LocalPlayer and (not ESPObjects[p] or not ESPObjects[p].Billboard or not ESPObjects[p].Billboard.Parent) then ApplyESP(p) end end
     else for p, _ in pairs(ESPObjects) do RemoveESP(p) end end
     
-    -- AIM LOCK 100% NEMPEL NO DELAY
+    -- AIM LOCK 100%
     if getgenv().Xyara.AimOn then
         if getgenv().Xyara.CurrentTarget and getgenv().Xyara.Locked then
             local t = getgenv().Xyara.CurrentTarget
             if t and t.Character and t.Character:FindFirstChild(getgenv().Xyara.AimPart) then
                 local hum = t.Character:FindFirstChild("Humanoid")
                 if hum and hum.Health > 0 and IsEnemy(t) and IsVisible(t.Character[getgenv().Xyara.AimPart]) then
-                    local part = t.Character[getgenv().Xyara.AimPart]
-                    -- LANGSUNG NEMPEL 100% NO SMOOTHNESS
-                    Camera.CFrame = CFrame.new(Camera.CFrame.Position, part.Position)
+                    Camera.CFrame = CFrame.new(Camera.CFrame.Position, t.Character[getgenv().Xyara.AimPart].Position)
                 else getgenv().Xyara.Locked = false; getgenv().Xyara.CurrentTarget = nil end
             else getgenv().Xyara.Locked = false; getgenv().Xyara.CurrentTarget = nil end
         else
-            if tick() - lastTargetSwitch > 0.1 then -- LEBIH CEPAT SWITCH
+            if tick() - lastTargetSwitch > 0.1 then
                 local c = GetClosestTarget()
                 if c then getgenv().Xyara.CurrentTarget = c; getgenv().Xyara.Locked = true; lastTargetSwitch = tick(); lockBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 100); lockBtn.Text = "UNLOCK" end
             end
         end
     else if getgenv().Xyara.Locked or getgenv().Xyara.CurrentTarget then getgenv().Xyara.Locked = false; getgenv().Xyara.CurrentTarget = nil; lockBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25); lockBtn.Text = "LOCK TARGET" end end
+    
+    -- NO CLIP
+    if getgenv().Xyara.NoClip and LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = false end
+        end
+    end
+    
+    -- GOD MODE
+    if getgenv().Xyara.GodMode and LocalPlayer.Character then
+        local hum = LocalPlayer.Character:FindFirstChild("Humanoid")
+        if hum then hum.PlatformStand = false; hum.Sit = false end
+    end
+    
+    -- FULL BRIGHT
+    if getgenv().Xyara.FullBright then
+        Lighting.Brightness = 10
+        Lighting.ClockTime = 14
+        Lighting.GlobalShadows = false
+    end
+    
+    -- AIR WALK
+    if getgenv().Xyara.AirWalk and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        if not AirWalkPart or not AirWalkPart.Parent then
+            AirWalkPart = Instance.new("Part")
+            AirWalkPart.Size = Vector3.new(10, 1, 10)
+            AirWalkPart.Anchored = true
+            AirWalkPart.CanCollide = true
+            AirWalkPart.Transparency = 1
+            AirWalkPart.Parent = workspace
+        end
+        local hrp = LocalPlayer.Character.HumanoidRootPart
+        AirWalkPart.CFrame = CFrame.new(hrp.Position.X, hrp.Position.Y - 3.5, hrp.Position.Z)
+    elseif AirWalkPart then AirWalkPart:Destroy(); AirWalkPart = nil end
 end))
 
--- =============================================
--- FLY SYSTEM (BODYVELOCITY/BODYGYRO)
--- =============================================
-
-local BV = Instance.new("BodyVelocity")
-local BG = Instance.new("BodyGyro")
-BV.MaxForce = Vector3.new(0, 0, 0)
-BG.MaxTorque = Vector3.new(0, 0, 0)
-BG.P = 12000
-
+-- FLY SYSTEM
 table.insert(ActiveConnections, RunService.RenderStepped:Connect(function()
     if getgenv().Xyara.Flying and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         local HRP = LocalPlayer.Character.HumanoidRootPart
@@ -452,8 +573,37 @@ table.insert(ActiveConnections, RunService.RenderStepped:Connect(function()
     end
 end))
 
--- Cleanup saat destroy
+-- INFINITE JUMP
+table.insert(ActiveConnections, UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.Space and getgenv().Xyara.InfJump then
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end
+end))
+
+-- HOTKEYS
+table.insert(ActiveConnections, UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.F then getgenv().Xyara.AimOn = not getgenv().Xyara.AimOn
+    elseif input.KeyCode == Enum.KeyCode.Q then getgenv().Xyara.SpeedOn = not getgenv().Xyara.SpeedOn
+    elseif input.KeyCode == Enum.KeyCode.G then
+        if getgenv().Xyara.CurrentTarget then getgenv().Xyara.Locked = not getgenv().Xyara.Locked else local c = GetClosestTarget(); if c then getgenv().Xyara.CurrentTarget = c; getgenv().Xyara.Locked = true end end
+        lockBtn.BackgroundColor3 = getgenv().Xyara.Locked and Color3.fromRGB(255, 0, 100) or Color3.fromRGB(25, 25, 25)
+        lockBtn.Text = getgenv().Xyara.Locked and "UNLOCK" or "LOCK TARGET"
+    elseif input.KeyCode == Enum.KeyCode.V then getgenv().Xyara.Flying = not getgenv().Xyara.Flying
+    elseif input.KeyCode == Enum.KeyCode.Y then if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then getgenv().Xyara.TPSpawnPoint = LocalPlayer.Character.HumanoidRootPart.CFrame end
+    elseif input.KeyCode == Enum.KeyCode.T then if not getgenv().Xyara.IsTeleporting and getgenv().Xyara.TPSpawnPoint and LocalPlayer.Character then local r = LocalPlayer.Character:FindFirstChild("HumanoidRootPart"); if r then r.CFrame = getgenv().Xyara.TPSpawnPoint end end
+    elseif input.KeyCode == Enum.KeyCode.Insert then Main.Visible = not Main.Visible
+    elseif input.KeyCode == Enum.KeyCode.N then getgenv().Xyara.NoClip = not getgenv().Xyara.NoClip
+    elseif input.KeyCode == Enum.KeyCode.B then getgenv().Xyara.AirWalk = not getgenv().Xyara.AirWalk end
+end))
+
 ScreenGui.Destroying:Connect(function() 
-    BV:Destroy()
-    BG:Destroy()
+    for _, c in pairs(ActiveConnections) do pcall(function() c:Disconnect() end) end
+    for p, _ in pairs(ESPObjects) do RemoveESP(p) end
+    if AirWalkPart then AirWalkPart:Destroy() end
+    BV:Destroy(); BG:Destroy()
+    getgenv().Xyara = nil 
 end)
