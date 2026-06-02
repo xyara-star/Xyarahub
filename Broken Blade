@@ -1,0 +1,558 @@
+--// Broken Blade NPC Lock Lite (MENU BISA DIGESER)
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local VIM = game:GetService("VirtualInputManager")
+local RunService = game:GetService("RunService")
+
+local LP = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+--// CONFIG
+
+local Config = {
+    AutoSkill = false,
+    AimLock = true,
+    Radius = 100,
+    AimPart = "HumanoidRootPart",
+}
+
+local Skills = {
+    {Key = "Z", Enabled = true},
+    {Key = "X", Enabled = true},
+    {Key = "C", Enabled = true},
+    {Key = "V", Enabled = false},
+}
+
+local CurrentTarget = nil
+local SelectedTargetName = nil
+
+--// GUI
+
+local GUI = Instance.new("ScreenGui")
+GUI.Name = "BBLite"
+GUI.ResetOnSpawn = false
+GUI.Parent = LP:WaitForChild("PlayerGui")
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(0,200,0,280)
+Main.Position = UDim2.new(0.5, -100, 0.3, 0)  -- Posisi tengah
+Main.BackgroundColor3 = Color3.fromRGB(25,25,25)
+Main.BackgroundTransparency = 0.15
+Main.BorderSizePixel = 0
+Main.Draggable = true  -- <-- INI KUNCINYA! BISA DIGESER LANGSUNG
+Main.Active = true
+Main.Parent = GUI
+Instance.new("UICorner",Main).CornerRadius = UDim.new(0,8)
+
+-- Title bar
+local Title = Instance.new("Frame")
+Title.Size = UDim2.new(1,0,0,30)
+Title.BackgroundColor3 = Color3.fromRGB(180,30,30)
+Title.BackgroundTransparency = 0.15
+Title.BorderSizePixel = 0
+Title.Parent = Main
+Instance.new("UICorner",Title).CornerRadius = UDim.new(0,8)
+
+local TitleText = Instance.new("TextLabel")
+TitleText.Size = UDim2.new(1,-60,1,0)
+TitleText.Position = UDim2.new(0,10,0,0)
+TitleText.BackgroundTransparency = 1
+TitleText.Text = "⚔️ Broken Blade"
+TitleText.TextColor3 = Color3.new(1,1,1)
+TitleText.Font = Enum.Font.GothamBold
+TitleText.TextSize = 13
+TitleText.TextXAlignment = Enum.TextXAlignment.Left
+TitleText.Parent = Title
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0,25,0,25)
+CloseBtn.Position = UDim2.new(1,-30,0,2)
+CloseBtn.Text = "X"
+CloseBtn.BackgroundColor3 = Color3.fromRGB(80,80,80)
+CloseBtn.BackgroundTransparency = 0.3
+CloseBtn.TextColor3 = Color3.new(1,1,1)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 12
+CloseBtn.Parent = Title
+Instance.new("UICorner",CloseBtn).CornerRadius = UDim.new(0,6)
+CloseBtn.MouseButton1Click:Connect(function() GUI:Destroy() end)
+
+local MiniBtn = Instance.new("TextButton")
+MiniBtn.Size = UDim2.new(0,25,0,25)
+MiniBtn.Position = UDim2.new(1,-58,0,2)
+MiniBtn.Text = "-"
+MiniBtn.BackgroundColor3 = Color3.fromRGB(100,100,100)
+MiniBtn.BackgroundTransparency = 0.3
+MiniBtn.TextColor3 = Color3.new(1,1,1)
+MiniBtn.Font = Enum.Font.GothamBold
+MiniBtn.TextSize = 14
+MiniBtn.Parent = Title
+Instance.new("UICorner",MiniBtn).CornerRadius = UDim.new(0,6)
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1,-10,1,-38)
+Content.Position = UDim2.new(0,5,0,34)
+Content.BackgroundTransparency = 1
+Content.Parent = Main
+
+local isMinimized = false
+MiniBtn.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    Content.Visible = not isMinimized
+    Main.Size = isMinimized and UDim2.new(0,200,0,30) or UDim2.new(0,200,0,280)
+end)
+
+-- UIList
+local UIList = Instance.new("UIListLayout")
+UIList.Padding = UDim.new(0,5)
+UIList.Parent = Content
+
+local function MakeToggle(name, default, callback)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1,0,0,32)
+    frame.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    frame.BackgroundTransparency = 0.3
+    frame.BorderSizePixel = 0
+    frame.Parent = Content
+    Instance.new("UICorner",frame).CornerRadius = UDim.new(0,6)
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.6,0,1,0)
+    label.Position = UDim2.new(0,8,0,0)
+    label.BackgroundTransparency = 1
+    label.Text = name
+    label.TextColor3 = Color3.new(1,1,1)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 11
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = frame
+    
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0,45,0,22)
+    btn.Position = UDim2.new(1,-50,0.5,-11)
+    btn.BackgroundColor3 = default and Color3.fromRGB(0,180,0) or Color3.fromRGB(80,80,80)
+    btn.BackgroundTransparency = 0.3
+    btn.Text = default and "ON" or "OFF"
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 10
+    btn.Parent = frame
+    Instance.new("UICorner",btn).CornerRadius = UDim.new(0,6)
+    
+    local state = default
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        btn.Text = state and "ON" or "OFF"
+        btn.BackgroundColor3 = state and Color3.fromRGB(0,180,0) or Color3.fromRGB(80,80,80)
+        callback(state)
+    end)
+end
+
+MakeToggle("🔥 Auto Skill", false, function(v) Config.AutoSkill = v end)
+MakeToggle("🎯 Aim Lock", true, function(v) Config.AimLock = v end)
+
+-- Radius slider
+local radiusFrame = Instance.new("Frame")
+radiusFrame.Size = UDim2.new(1,0,0,32)
+radiusFrame.BackgroundColor3 = Color3.fromRGB(40,40,40)
+radiusFrame.BackgroundTransparency = 0.3
+radiusFrame.BorderSizePixel = 0
+radiusFrame.Parent = Content
+Instance.new("UICorner",radiusFrame).CornerRadius = UDim.new(0,6)
+
+local radiusLabel = Instance.new("TextLabel")
+radiusLabel.Size = UDim2.new(0.6,0,1,0)
+radiusLabel.Position = UDim2.new(0,8,0,0)
+radiusLabel.BackgroundTransparency = 1
+radiusLabel.Text = "📡 Radius: " .. Config.Radius
+radiusLabel.TextColor3 = Color3.new(1,1,1)
+radiusLabel.Font = Enum.Font.GothamBold
+radiusLabel.TextSize = 11
+radiusLabel.TextXAlignment = Enum.TextXAlignment.Left
+radiusLabel.Parent = radiusFrame
+
+local radiusInput = Instance.new("TextBox")
+radiusInput.Size = UDim2.new(0,45,0,22)
+radiusInput.Position = UDim2.new(1,-50,0.5,-11)
+radiusInput.BackgroundColor3 = Color3.fromRGB(80,80,80)
+radiusInput.BackgroundTransparency = 0.3
+radiusInput.Text = tostring(Config.Radius)
+radiusInput.TextColor3 = Color3.new(1,1,1)
+radiusInput.Font = Enum.Font.GothamBold
+radiusInput.TextSize = 10
+radiusInput.Parent = radiusFrame
+Instance.new("UICorner",radiusInput).CornerRadius = UDim.new(0,6)
+
+radiusInput.FocusLost:Connect(function()
+    local val = tonumber(radiusInput.Text)
+    if val and val > 0 and val <= 200 then
+        Config.Radius = val
+        radiusLabel.Text = "📡 Radius: " .. Config.Radius
+    else
+        radiusInput.Text = tostring(Config.Radius)
+    end
+end)
+
+for _, s in ipairs(Skills) do
+    MakeToggle("Skill " .. s.Key, s.Enabled, function(v)
+        s.Enabled = v
+    end)
+end
+
+local StatusText = Instance.new("TextLabel")
+StatusText.Size = UDim2.new(1,0,0,20)
+StatusText.BackgroundTransparency = 1
+StatusText.Text = "Status: Idle"
+StatusText.TextColor3 = Color3.fromRGB(180,180,180)
+StatusText.Font = Enum.Font.Gotham
+StatusText.TextSize = 10
+StatusText.Parent = Content
+
+--// BOSS LIST (JUGA BISA DIGESER)
+local BossPanel = Instance.new("Frame")
+BossPanel.Size = UDim2.new(0,180,0,280)
+BossPanel.Position = UDim2.new(1,-190,0,50)
+BossPanel.BackgroundColor3 = Color3.fromRGB(20,20,25)
+BossPanel.BackgroundTransparency = 0.15
+BossPanel.BorderSizePixel = 0
+BossPanel.Draggable = true  -- <-- BOSS LIST JUGA BISA DIGESER
+BossPanel.Active = true
+BossPanel.Parent = GUI
+Instance.new("UICorner",BossPanel).CornerRadius = UDim.new(0,8)
+
+local BossHeader = Instance.new("Frame")
+BossHeader.Size = UDim2.new(1,0,0,30)
+BossHeader.BackgroundColor3 = Color3.fromRGB(180,30,30)
+BossHeader.BackgroundTransparency = 0.15
+BossHeader.BorderSizePixel = 0
+BossHeader.Parent = BossPanel
+Instance.new("UICorner",BossHeader).CornerRadius = UDim.new(0,8)
+
+local BossTitle = Instance.new("TextLabel")
+BossTitle.Size = UDim2.new(1,-30,1,0)
+BossTitle.Position = UDim2.new(0,10,0,0)
+BossTitle.BackgroundTransparency = 1
+BossTitle.Text = "📋 BOSS LIST (MAX 3)"
+BossTitle.TextColor3 = Color3.new(1,1,1)
+BossTitle.Font = Enum.Font.GothamBold
+BossTitle.TextSize = 10
+BossTitle.TextXAlignment = Enum.TextXAlignment.Left
+BossTitle.Parent = BossHeader
+
+local ToggleBossBtn = Instance.new("TextButton")
+ToggleBossBtn.Size = UDim2.new(0,25,0,25)
+ToggleBossBtn.Position = UDim2.new(1,-28,0,2)
+ToggleBossBtn.Text = "−"
+ToggleBossBtn.BackgroundColor3 = Color3.fromRGB(80,80,80)
+ToggleBossBtn.BackgroundTransparency = 0.3
+ToggleBossBtn.TextColor3 = Color3.new(1,1,1)
+ToggleBossBtn.Font = Enum.Font.GothamBold
+ToggleBossBtn.TextSize = 12
+ToggleBossBtn.Parent = BossHeader
+Instance.new("UICorner",ToggleBossBtn).CornerRadius = UDim.new(0,6)
+
+local BossListFrame = Instance.new("ScrollingFrame")
+BossListFrame.Size = UDim2.new(1,0,1,-35)
+BossListFrame.Position = UDim2.new(0,0,0,33)
+BossListFrame.BackgroundColor3 = Color3.fromRGB(20,20,25)
+BossListFrame.BackgroundTransparency = 0.15
+BossListFrame.BorderSizePixel = 0
+BossListFrame.Parent = BossPanel
+Instance.new("UICorner",BossListFrame).CornerRadius = UDim.new(0,0)
+
+local ListLayout = Instance.new("UIListLayout")
+ListLayout.Padding = UDim.new(0,3)
+ListLayout.Parent = BossListFrame
+
+local isBossListVisible = true
+ToggleBossBtn.MouseButton1Click:Connect(function()
+    isBossListVisible = not isBossListVisible
+    BossListFrame.Visible = isBossListVisible
+    ToggleBossBtn.Text = isBossListVisible and "−" or "+"
+    BossPanel.Size = isBossListVisible and UDim2.new(0,180,0,280) or UDim2.new(0,180,0,30)
+end)
+
+local TargetInfo = Instance.new("TextLabel")
+TargetInfo.Size = UDim2.new(0,180,0,35)
+TargetInfo.Position = UDim2.new(1,-190,0,340)
+TargetInfo.BackgroundColor3 = Color3.fromRGB(25,35,25)
+TargetInfo.BackgroundTransparency = 0.15
+TargetInfo.TextColor3 = Color3.fromRGB(0,255,100)
+TargetInfo.Font = Enum.Font.GothamBold
+TargetInfo.TextSize = 10
+TargetInfo.Visible = false
+TargetInfo.Parent = GUI
+Instance.new("UICorner",TargetInfo).CornerRadius = UDim.new(0,6)
+
+--// CORE FUNCTIONS
+
+local function IsEnemy(model)
+    if not model or not model.Parent then return false end
+    if Players:GetPlayerFromCharacter(model) then return false end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return false end
+    return true
+end
+
+local function GetAllNearbyEnemies()
+    local enemies = {}
+    local char = LP.Character
+    if not char then return enemies end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return enemies end
+    
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") and IsEnemy(obj) then
+            local root = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChild("Head")
+            if root then
+                local dist = (hrp.Position - root.Position).Magnitude
+                if dist <= Config.Radius then
+                    table.insert(enemies, {
+                        Model = obj,
+                        Distance = dist,
+                        Humanoid = obj:FindFirstChildOfClass("Humanoid"),
+                        Root = root
+                    })
+                end
+            end
+        end
+    end
+    
+    table.sort(enemies, function(a, b) return a.Distance < b.Distance end)
+    
+    local maxEnemies = {}
+    for i = 1, math.min(3, #enemies) do
+        table.insert(maxEnemies, enemies[i])
+    end
+    return maxEnemies
+end
+
+local function FindEnemyByName(name)
+    local enemies = GetAllNearbyEnemies()
+    for _, enemy in ipairs(enemies) do
+        if enemy.Model.Name == name then
+            return enemy.Model
+        end
+    end
+    return nil
+end
+
+-- Update boss list
+local function UpdateBossListUI()
+    for _, child in ipairs(BossListFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+    
+    local enemies = GetAllNearbyEnemies()
+    
+    if #enemies == 0 then
+        local empty = Instance.new("TextLabel")
+        empty.Size = UDim2.new(1,0,0,35)
+        empty.BackgroundColor3 = Color3.fromRGB(35,35,40)
+        empty.BackgroundTransparency = 0.3
+        empty.Text = "⚠️ No Enemy"
+        empty.TextColor3 = Color3.fromRGB(200,200,200)
+        empty.Font = Enum.Font.Gotham
+        empty.TextSize = 10
+        empty.Parent = BossListFrame
+        Instance.new("UICorner",empty).CornerRadius = UDim.new(0,6)
+        return
+    end
+    
+    for _, enemy in ipairs(enemies) do
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1,0,0,42)
+        btn.BackgroundColor3 = (SelectedTargetName == enemy.Model.Name) and Color3.fromRGB(180,30,30) or Color3.fromRGB(35,35,40)
+        btn.BackgroundTransparency = 0.3
+        btn.Parent = BossListFrame
+        Instance.new("UICorner",btn).CornerRadius = UDim.new(0,6)
+        
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Size = UDim2.new(1,0,0.5,0)
+        nameLabel.Position = UDim2.new(0,5,0,2)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = string.sub(enemy.Model.Name, 1, 18)
+        nameLabel.TextColor3 = Color3.new(1,1,1)
+        nameLabel.Font = Enum.Font.GothamBold
+        nameLabel.TextSize = 10
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.Parent = btn
+        
+        local infoLabel = Instance.new("TextLabel")
+        infoLabel.Size = UDim2.new(1,0,0.4,0)
+        infoLabel.Position = UDim2.new(0,5,0.5,0)
+        infoLabel.BackgroundTransparency = 1
+        local hpPercent = enemy.Humanoid.Health / enemy.Humanoid.MaxHealth
+        infoLabel.Text = string.format("❤️ %.0f/%.0f  📍 %.0f", enemy.Humanoid.Health, enemy.Humanoid.MaxHealth, enemy.Distance)
+        infoLabel.TextColor3 = hpPercent > 0.5 and Color3.fromRGB(0,255,0) or (hpPercent > 0.2 and Color3.fromRGB(255,200,0) or Color3.fromRGB(255,0,0))
+        infoLabel.Font = Enum.Font.Gotham
+        infoLabel.TextSize = 9
+        infoLabel.TextXAlignment = Enum.TextXAlignment.Left
+        infoLabel.Parent = btn
+        
+        local hpBarBg = Instance.new("Frame")
+        hpBarBg.Size = UDim2.new(0.95,0,0,3)
+        hpBarBg.Position = UDim2.new(0.025,0,1,-5)
+        hpBarBg.BackgroundColor3 = Color3.fromRGB(50,50,50)
+        hpBarBg.BackgroundTransparency = 0.3
+        hpBarBg.BorderSizePixel = 0
+        hpBarBg.Parent = btn
+        Instance.new("UICorner",hpBarBg).CornerRadius = UDim.new(0,2)
+        
+        local hpBar = Instance.new("Frame")
+        hpBar.Size = UDim2.new(hpPercent,0,1,0)
+        hpBar.BackgroundColor3 = hpPercent > 0.5 and Color3.fromRGB(0,255,0) or (hpPercent > 0.2 and Color3.fromRGB(255,200,0) or Color3.fromRGB(255,0,0))
+        hpBar.BorderSizePixel = 0
+        hpBar.Parent = hpBarBg
+        Instance.new("UICorner",hpBar).CornerRadius = UDim.new(0,2)
+        
+        btn.MouseButton1Click:Connect(function()
+            SelectedTargetName = enemy.Model.Name
+            CurrentTarget = enemy.Model
+            TargetInfo.Visible = true
+            TargetInfo.Text = "🎯 LOCKED: " .. enemy.Model.Name
+            TargetInfo.BackgroundColor3 = Color3.fromRGB(30,40,30)
+            
+            for _, child in ipairs(BossListFrame:GetChildren()) do
+                if child:IsA("TextButton") then
+                    child.BackgroundColor3 = Color3.fromRGB(35,35,40)
+                end
+            end
+            btn.BackgroundColor3 = Color3.fromRGB(180,30,30)
+            StatusText.Text = "🔒 Locked: " .. enemy.Model.Name
+        end)
+    end
+    
+    local canvasHeight = #enemies * 45 + 30
+    BossListFrame.CanvasSize = UDim2.new(0, 0, 0, canvasHeight)
+end
+
+--// PRESS KEY
+local function PressKey(key)
+    local kc = Enum.KeyCode[key]
+    if not kc then return end
+    pcall(function()
+        VIM:SendKeyEvent(true, kc, false, game)
+        task.wait()
+        VIM:SendKeyEvent(false, kc, false, game)
+    end)
+end
+
+--// AIM LOCK
+RunService.RenderStepped:Connect(function()
+    if not Config.AimLock then return end
+    if not CurrentTarget then return end
+    
+    local targetPart = CurrentTarget:FindFirstChild(Config.AimPart) 
+        or CurrentTarget:FindFirstChild("HumanoidRootPart") 
+        or CurrentTarget:FindFirstChild("Head")
+    
+    if targetPart then
+        Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
+    end
+end)
+
+--// AUTO SKILL LOOP
+task.spawn(function()
+    while true do
+        task.wait(0.03)
+        
+        if not Config.AutoSkill then
+            task.wait(0.3)
+            continue
+        end
+        
+        if not SelectedTargetName then
+            task.wait(0.3)
+            continue
+        end
+        
+        local target = FindEnemyByName(SelectedTargetName)
+        if not target then
+            task.wait(0.3)
+            continue
+        end
+        
+        local hum = target:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then
+            task.wait(0.5)
+            continue
+        end
+        
+        CurrentTarget = target
+        
+        for _, s in ipairs(Skills) do
+            if s.Enabled then
+                PressKey(s.Key)
+                task.wait(0.008)
+            end
+        end
+    end
+end)
+
+--// MAIN UPDATE LOOP
+task.spawn(function()
+    while true do
+        task.wait(0.2)
+        
+        UpdateBossListUI()
+        
+        if SelectedTargetName then
+            local target = FindEnemyByName(SelectedTargetName)
+            
+            if target then
+                local hum = target:FindFirstChildOfClass("Humanoid")
+                if hum and hum.Health > 0 then
+                    CurrentTarget = target
+                    local hpPercent = hum.Health / hum.MaxHealth
+                    StatusText.Text = string.format("⚔️ %s [❤️ %.0f%%]", SelectedTargetName, hpPercent * 100)
+                    
+                    local char = LP.Character
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    local targetRoot = target:FindFirstChild("HumanoidRootPart")
+                    if hrp and targetRoot then
+                        local dist = (hrp.Position - targetRoot.Position).Magnitude
+                        TargetInfo.Text = string.format("🎯 %s\n❤️ %.0f/%.0f | 📍 %.0f", 
+                            SelectedTargetName, hum.Health, hum.MaxHealth, dist)
+                    else
+                        TargetInfo.Text = string.format("🎯 %s\n❤️ %.0f/%.0f", SelectedTargetName, hum.Health, hum.MaxHealth)
+                    end
+                    TargetInfo.BackgroundColor3 = Color3.fromRGB(30,40,30)
+                    TargetInfo.Visible = true
+                else
+                    CurrentTarget = nil
+                    TargetInfo.Text = "💀 WAITING: " .. SelectedTargetName
+                    TargetInfo.BackgroundColor3 = Color3.fromRGB(40,30,30)
+                    StatusText.Text = "⏳ Waiting for " .. SelectedTargetName
+                end
+            else
+                CurrentTarget = nil
+                TargetInfo.Text = "🔍 SEARCHING: " .. SelectedTargetName
+                TargetInfo.BackgroundColor3 = Color3.fromRGB(40,40,30)
+                StatusText.Text = "🔍 Searching for " .. SelectedTargetName
+            end
+        else
+            TargetInfo.Visible = false
+            local enemies = GetAllNearbyEnemies()
+            if #enemies > 0 and not isMinimized then
+                StatusText.Text = "🔍 " .. enemies[1].Model.Name .. " nearby"
+            elseif not isMinimized then
+                StatusText.Text = "😴 No enemies"
+            end
+        end
+    end
+end)
+
+LP.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    CurrentTarget = nil
+    StatusText.Text = "🔄 Respawned..."
+end)
+
+print("✅ MENU BISA DIGESER!")
+print("   - Klik dan tahan di TITLE BAR (bagian atas frame)")
+print("   - Geser ke mana saja")
+print("   - Boss list juga bisa digeser")
