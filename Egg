@@ -1,25 +1,32 @@
--- Script Auto Pickup Egg - Version Simple Input
+-- Script Auto Pickup Egg - Version Fixed
 -- Simpan sebagai LocalScript di StarterGui
 
 local player = game.Players.LocalPlayer
-local backpack = player.Backpack
+local backpack = player:WaitForChild("Backpack")
 local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- Config
 local Config = {
     Enabled = true,
     Range = 50,
-    TargetEggs = {"Rare Egg"} -- Default target Rare Egg
+    TargetEggs = {"Rare Egg"}, -- Default target Rare Egg
+    PickupCooldown = 0.3, -- Cooldown antar pickup (detik)
+    CheckInterval = 0.1 -- Interval pengecekan (detik)
 }
+
+-- State
+local LastPickup = 0
+local ProcessedEggs = {} -- Track egg yang sudah diproses
 
 -- UI Super Simple
 local gui = Instance.new("ScreenGui")
 gui.Name = "EggPicker"
-gui.Parent = player.PlayerGui
+gui.Parent = player:WaitForChild("PlayerGui")
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 180, 0, 120)
-frame.Position = UDim2.new(0.01, 0, 0.5, -60)
+frame.Size = UDim2.new(0, 200, 0, 140)
+frame.Position = UDim2.new(0.01, 0, 0.5, -70)
 frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 frame.BackgroundTransparency = 0.1
 frame.Active = true
@@ -27,12 +34,12 @@ frame.Draggable = true
 frame.Parent = gui
 
 local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 6)
+corner.CornerRadius = UDim.new(0, 8)
 corner.Parent = frame
 
 -- Title
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 25)
+title.Size = UDim2.new(1, 0, 0, 28)
 title.BackgroundTransparency = 1
 title.Text = "🎯 Egg Picker"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -42,8 +49,8 @@ title.Parent = frame
 
 -- Input Box untuk nama egg
 local inputBox = Instance.new("TextBox")
-inputBox.Size = UDim2.new(0.7, 0, 0, 25)
-inputBox.Position = UDim2.new(0.05, 0, 0.25, 0)
+inputBox.Size = UDim2.new(0.65, 0, 0, 28)
+inputBox.Position = UDim2.new(0.05, 0, 0.22, 0)
 inputBox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 inputBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 inputBox.PlaceholderText = "Rare Egg"
@@ -55,13 +62,13 @@ inputBox.ClearTextOnFocus = false
 inputBox.Parent = frame
 
 local inputCorner = Instance.new("UICorner")
-inputCorner.CornerRadius = UDim.new(0, 4)
+inputCorner.CornerRadius = UDim.new(0, 6)
 inputCorner.Parent = inputBox
 
 -- Tombol Set Target
 local setBtn = Instance.new("TextButton")
-setBtn.Size = UDim2.new(0.2, 0, 0, 25)
-setBtn.Position = UDim2.new(0.77, 0, 0.25, 0)
+setBtn.Size = UDim2.new(0.25, 0, 0, 28)
+setBtn.Position = UDim2.new(0.72, 0, 0.22, 0)
 setBtn.BackgroundColor3 = Color3.fromRGB(76, 175, 80)
 setBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 setBtn.Text = "Set"
@@ -70,13 +77,13 @@ setBtn.TextScaled = true
 setBtn.Parent = frame
 
 local setCorner = Instance.new("UICorner")
-setCorner.CornerRadius = UDim.new(0, 4)
+setCorner.CornerRadius = UDim.new(0, 6)
 setCorner.Parent = setBtn
 
 -- Toggle ON/OFF
 local toggle = Instance.new("TextButton")
-toggle.Size = UDim2.new(0.4, 0, 0, 25)
-toggle.Position = UDim2.new(0.05, 0, 0.55, 0)
+toggle.Size = UDim2.new(0.4, 0, 0, 30)
+toggle.Position = UDim2.new(0.05, 0, 0.5, 0)
 toggle.BackgroundColor3 = Color3.fromRGB(76, 175, 80)
 toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
 toggle.Text = "ON"
@@ -85,26 +92,41 @@ toggle.TextScaled = true
 toggle.Parent = frame
 
 local toggleCorner = Instance.new("UICorner")
-toggleCorner.CornerRadius = UDim.new(0, 4)
+toggleCorner.CornerRadius = UDim.new(0, 6)
 toggleCorner.Parent = toggle
 
 -- Status Label
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Size = UDim2.new(0.5, 0, 0, 25)
-statusLabel.Position = UDim2.new(0.5, 0, 0.55, 0)
+statusLabel.Position = UDim2.new(0.5, 0, 0.52, 0)
 statusLabel.BackgroundTransparency = 1
-statusLabel.Text = "Target: Rare"
+statusLabel.Text = "Target: Rare Egg"
 statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
 statusLabel.TextScaled = true
 statusLabel.Font = Enum.Font.Gotham
 statusLabel.Parent = frame
 
+-- Counter Label
+local counterLabel = Instance.new("TextLabel")
+counterLabel.Size = UDim2.new(1, 0, 0, 20)
+counterLabel.Position = UDim2.new(0, 0, 0.72, 0)
+counterLabel.BackgroundTransparency = 1
+counterLabel.Text = "Picked: 0"
+counterLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+counterLabel.TextScaled = true
+counterLabel.Font = Enum.Font.Gotham
+counterLabel.Parent = frame
+
 -- Functions
+local PickedCount = 0
+
 local function UpdateTarget()
     local inputText = inputBox.Text
     if inputText ~= "" then
         Config.TargetEggs = {inputText}
         statusLabel.Text = "Target: " .. inputText
+        -- Reset processed eggs saat ganti target
+        ProcessedEggs = {}
         print("🎯 Target egg: " .. inputText)
     end
 end
@@ -117,8 +139,33 @@ local function IsTarget(name)
     return false
 end
 
+local function SafePickup(egg)
+    local success, err = pcall(function()
+        -- Cek apakah egg masih valid
+        if not egg or not egg.Parent then return end
+        if egg.Parent == player or egg.Parent == backpack then return end
+        
+        -- Cek apakah egg sudah dipegang player lain
+        if egg.Parent:IsA("Model") and egg.Parent:FindFirstChild("Humanoid") then
+            return -- Egg dipegang player lain
+        end
+        
+        -- Pindahkan ke backpack
+        egg.Parent = backpack
+        PickedCount = PickedCount + 1
+        counterLabel.Text = "Picked: " .. tostring(PickedCount)
+    end)
+    
+    if not success then
+        warn("⚠️ Gagal pickup egg: " .. tostring(err))
+    end
+end
+
 local function AutoPickup()
     if not Config.Enabled then return end
+    
+    local now = tick()
+    if now - LastPickup < Config.PickupCooldown then return end
     
     local char = player.Character
     if not char then return end
@@ -126,13 +173,44 @@ local function AutoPickup()
     local root = char:FindFirstChild("HumanoidRootPart")
     if not root then return end
     
-    for _, egg in pairs(workspace:GetDescendants()) do
-        if egg:IsA("Tool") and egg.Name:find("Egg") and egg.Parent ~= player and egg.Parent ~= backpack then
-            if IsTarget(egg.Name) then
-                local handle = egg:FindFirstChild("Handle")
-                if handle and (root.Position - handle.Position).Magnitude <= Config.Range then
-                    egg.Parent = backpack
-                    task.wait(0.15)
+    -- Cari egg di workspace dengan cara yang lebih efisien
+    local eggs = workspace:GetDescendants()
+    local found = false
+    
+    for _, obj in pairs(eggs) do
+        if not Config.Enabled then break end
+        
+        -- Cek apakah objek adalah Tool dan mengandung "Egg" di namanya
+        if obj:IsA("Tool") and obj.Name:find("Egg") then
+            -- Skip jika sudah di inventory player
+            if obj.Parent == player or obj.Parent == backpack then
+                continue
+            end
+            
+            -- Skip jika sudah diproses sebelumnya (berdasarkan instance)
+            if ProcessedEggs[obj] then
+                continue
+            end
+            
+            -- Cek target
+            if IsTarget(obj.Name) then
+                local handle = obj:FindFirstChild("Handle")
+                if handle then
+                    local distance = (root.Position - handle.Position).Magnitude
+                    if distance <= Config.Range then
+                        SafePickup(obj)
+                        ProcessedEggs[obj] = true
+                        LastPickup = now
+                        found = true
+                        
+                        -- Cleanup processed eggs yang sudah tidak valid
+                        task.spawn(function()
+                            task.wait(5)
+                            ProcessedEggs[obj] = nil
+                        end)
+                        
+                        break -- Pickup satu per frame untuk menghindari lag
+                    end
                 end
             end
         end
@@ -142,7 +220,6 @@ end
 -- Events
 setBtn.MouseButton1Click:Connect(UpdateTarget)
 
--- Enter key juga bisa set target
 inputBox.FocusLost:Connect(function(enterPressed)
     if enterPressed then
         UpdateTarget()
@@ -155,364 +232,25 @@ toggle.MouseButton1Click:Connect(function()
     toggle.BackgroundColor3 = Config.Enabled and Color3.fromRGB(76, 175, 80) or Color3.fromRGB(244, 67, 54)
 end)
 
-RunService.Heartbeat:Connect(AutoPickup)
+-- Heartbeat dengan interval
+local LastCheck = 0
+RunService.Heartbeat:Connect(function()
+    local now = tick()
+    if now - LastCheck >= Config.CheckInterval then
+        LastCheck = now
+        AutoPickup()
+    end
+end)
+
+-- Cleanup saat character respawn
+player.CharacterAdded:Connect(function()
+    backpack = player:WaitForChild("Backpack")
+    ProcessedEggs = {}
+end)
 
 -- Initial
 task.wait(0.5)
 statusLabel.Text = "Target: Rare Egg"
-print("✅ Auto Pickup Egg loaded!")
-print("📝 Masukkan nama egg di kotak, klik Set atau tekan Enter")topBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-topBar.BackgroundTransparency = 0.5
-topBar.Parent = frame
-
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(0.5, 0, 1, 0)
-title.BackgroundTransparency = 1
-title.Text = "Egg"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.TextScaled = true
-title.Font = Enum.Font.GothamBold
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.Parent = topBar
-
-local toggle = Instance.new("TextButton")
-toggle.Size = UDim2.new(0.3, 0, 0.7, 0)
-toggle.Position = UDim2.new(0.65, 0, 0.15, 0)
-toggle.BackgroundColor3 = Color3.fromRGB(76, 175, 80)
-toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggle.Text = "ON"
-toggle.Font = Enum.Font.GothamBold
-toggle.TextScaled = true
-toggle.Parent = topBar
-
-local toggleCorner = Instance.new("UICorner")
-toggleCorner.CornerRadius = UDim.new(0, 3)
-toggleCorner.Parent = toggle
-
--- Filter input
-local filterBox = Instance.new("TextBox")
-filterBox.Size = UDim2.new(0.85, 0, 0, 18)
-filterBox.Position = UDim2.new(0.075, 0, 0.16, 0)
-filterBox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-filterBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-filterBox.PlaceholderText = "Filter egg..."
-filterBox.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
-filterBox.Text = ""
-filterBox.Font = Enum.Font.Gotham
-filterBox.TextScaled = true
-filterBox.ClearTextOnFocus = false
-filterBox.Parent = frame
-
-local filterCorner = Instance.new("UICorner")
-filterCorner.CornerRadius = UDim.new(0, 3)
-filterCorner.Parent = filterBox
-
--- Egg List (lebih kecil)
-local scroll = Instance.new("ScrollingFrame")
-scroll.Size = UDim2.new(1, 0, 0, 110)
-scroll.Position = UDim2.new(0, 0, 0.28, 0)
-scroll.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-scroll.BackgroundTransparency = 0.5
-scroll.BorderSizePixel = 0
-scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-scroll.Parent = frame
-
-local layout = Instance.new("UIListLayout")
-layout.Padding = UDim.new(0, 1)
-layout.SortOrder = Enum.SortOrder.LayoutOrder
-layout.Parent = scroll
-
--- Status text
-local status = Instance.new("TextLabel")
-status.Size = UDim2.new(1, 0, 0, 15)
-status.Position = UDim2.new(0, 0, 0.88, 0)
-status.BackgroundTransparency = 1
-status.Text = "✅ Active"
-status.TextColor3 = Color3.fromRGB(76, 175, 80)
-status.TextScaled = true
-status.Font = Enum.Font.Gotham
-status.Parent = frame
-
--- Functions
-local function GetRarityColor(name)
-    if name:find("Common") then return Color3.fromRGB(128, 128, 128) end
-    if name:find("Uncommon") then return Color3.fromRGB(0, 176, 80) end
-    if name:find("Rare") then return Color3.fromRGB(0, 112, 255) end
-    if name:find("Epic") then return Color3.fromRGB(156, 39, 176) end
-    if name:find("Legendary") then return Color3.fromRGB(255, 193, 7) end
-    if name:find("Mythic") then return Color3.fromRGB(255, 87, 34) end
-    return Color3.fromRGB(200, 200, 200)
-end
-
-local function UpdateList()
-    -- Clear
-    for _, child in pairs(scroll:GetChildren()) do
-        if child:IsA("TextLabel") then
-            child:Destroy()
-        end
-    end
-    
-    local eggs = {}
-    local filter = filterBox.Text:lower()
-    
-    for _, item in pairs(backpack:GetChildren()) do
-        if item:IsA("Tool") and item.Name:find("Egg") then
-            local name = item.Name
-            if filter == "" or name:lower():find(filter) then
-                table.insert(eggs, name)
-            end
-        end
-    end
-    
-    scroll.CanvasSize = UDim2.new(0, 0, 0, #eggs * 18 + 5)
-    
-    for _, name in pairs(eggs) do
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(0.9, 0, 0, 16)
-        label.Position = UDim2.new(0.05, 0, 0, 0)
-        label.BackgroundColor3 = GetRarityColor(name)
-        label.BackgroundTransparency = 0.6
-        label.TextColor3 = Color3.fromRGB(255, 255, 255)
-        label.Text = name
-        label.TextScaled = true
-        label.Font = Enum.Font.Gotham
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.Parent = scroll
-        
-        -- Tax bar mini
-        local bar = Instance.new("Frame")
-        bar.Size = UDim2.new(0.25, 0, 0.35, 0)
-        bar.Position = UDim2.new(0.7, 0, 0.32, 0)
-        bar.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-        bar.BorderSizePixel = 0
-        bar.Parent = label
-        
-        local fill = Instance.new("Frame")
-        fill.Size = UDim2.new(math.random(30, 100) / 100, 0, 1, 0)
-        fill.BackgroundColor3 = GetRarityColor(name)
-        fill.BorderSizePixel = 0
-        fill.Parent = bar
-        
-        local pct = Instance.new("TextLabel")
-        pct.Size = UDim2.new(1, 0, 1, 0)
-        pct.BackgroundTransparency = 1
-        pct.Text = fill.Size.X.Scale * 100 .. "%"
-        pct.TextColor3 = Color3.fromRGB(255, 255, 255)
-        pct.TextScaled = true
-        pct.Font = Enum.Font.Gotham
-        pct.Parent = fill
-    end
-end
-
-local function IsTarget(name)
-    if #Config.TargetEggs == 0 then return true end
-    for _, target in pairs(Config.TargetEggs) do
-        if name:find(target) then return true end
-    end
-    return false
-end
-
-local function AutoPickup()
-    if not Config.Enabled then return end
-    
-    local char = player.Character
-    if not char then return end
-    
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    
-    local picked = false
-    for _, egg in pairs(workspace:GetDescendants()) do
-        if egg:IsA("Tool") and egg.Name:find("Egg") and egg.Parent ~= player and egg.Parent ~= backpack then
-            if IsTarget(egg.Name) then
-                local handle = egg:FindFirstChild("Handle")
-                if handle and (root.Position - handle.Position).Magnitude <= Config.Range then
-                    egg.Parent = backpack
-                    picked = true
-                    task.wait(0.15)
-                end
-            end
-        end
-    end
-    if picked then
-        UpdateList()
-    end
-end
-
--- Filter event
-filterBox:GetPropertyChangedSignal("Text"):Connect(UpdateList)
-
--- Toggle
-toggle.MouseButton1Click:Connect(function()
-    Config.Enabled = not Config.Enabled
-    toggle.Text = Config.Enabled and "ON" or "OFF"
-    toggle.BackgroundColor3 = Config.Enabled and Color3.fromRGB(76, 175, 80) or Color3.fromRGB(244, 67, 54)
-    status.Text = Config.Enabled and "✅ Active" or "❌ Paused"
-    status.TextColor3 = Config.Enabled and Color3.fromRGB(76, 175, 80) or Color3.fromRGB(244, 67, 54)
-end)
-
--- Auto pickup loop
-RunService.Heartbeat:Connect(AutoPickup)
-
--- Update saat tas berubah
-backpack.ChildAdded:Connect(function() task.wait(0.3) UpdateList() end)
-backpack.ChildRemoved:Connect(function() task.wait(0.3) UpdateList() end)
-
--- Initial
-task.wait(0.5)
-UpdateList()
-
-print("✅ Auto Pickup Egg loaded!")
-print("📦 UI bisa digeser, filter egg dengan kotak teks")local title = Instance.new("TextLabel")
-title.Size = UDim2.new(0.6, 0, 1, 0)
-title.BackgroundTransparency = 1
-title.Text = "Egg Pickup"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.TextScaled = true
-title.Font = Enum.Font.GothamBold
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.Parent = titleBar
-
-local toggle = Instance.new("TextButton")
-toggle.Size = UDim2.new(0.25, 0, 0.7, 0)
-toggle.Position = UDim2.new(0.72, 0, 0.15, 0)
-toggle.BackgroundColor3 = Color3.fromRGB(76, 175, 80)
-toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggle.Text = "ON"
-toggle.Font = Enum.Font.GothamBold
-toggle.TextScaled = true
-toggle.Parent = titleBar
-
-local toggleCorner = Instance.new("UICorner")
-toggleCorner.CornerRadius = UDim.new(0, 4)
-toggleCorner.Parent = toggle
-
--- Egg List
-local scroll = Instance.new("ScrollingFrame")
-scroll.Size = UDim2.new(1, 0, 0, 200)
-scroll.Position = UDim2.new(0, 0, 0.12, 0)
-scroll.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-scroll.BackgroundTransparency = 0.5
-scroll.BorderSizePixel = 0
-scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-scroll.Parent = frame
-
-local layout = Instance.new("UIListLayout")
-layout.Padding = UDim.new(0, 2)
-layout.SortOrder = Enum.SortOrder.LayoutOrder
-layout.Parent = scroll
-
--- Functions
-local function GetRarityColor(name)
-    if name:find("Common") then return Color3.fromRGB(128, 128, 128) end
-    if name:find("Uncommon") then return Color3.fromRGB(0, 176, 80) end
-    if name:find("Rare") then return Color3.fromRGB(0, 112, 255) end
-    if name:find("Epic") then return Color3.fromRGB(156, 39, 176) end
-    if name:find("Legendary") then return Color3.fromRGB(255, 193, 7) end
-    if name:find("Mythic") then return Color3.fromRGB(255, 87, 34) end
-    return Color3.fromRGB(200, 200, 200)
-end
-
-local function UpdateList()
-    -- Clear
-    for _, child in pairs(scroll:GetChildren()) do
-        if child:IsA("TextLabel") then
-            child:Destroy()
-        end
-    end
-    
-    local eggs = {}
-    for _, item in pairs(backpack:GetChildren()) do
-        if item:IsA("Tool") and item.Name:find("Egg") then
-            table.insert(eggs, item.Name)
-        end
-    end
-    
-    scroll.CanvasSize = UDim2.new(0, 0, 0, #eggs * 22 + 5)
-    
-    for _, name in pairs(eggs) do
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(0.9, 0, 0, 20)
-        label.Position = UDim2.new(0.05, 0, 0, 0)
-        label.BackgroundColor3 = GetRarityColor(name)
-        label.BackgroundTransparency = 0.7
-        label.TextColor3 = Color3.fromRGB(255, 255, 255)
-        label.Text = name
-        label.TextScaled = true
-        label.Font = Enum.Font.Gotham
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.Parent = scroll
-        
-        -- Tax bar simple
-        local bar = Instance.new("Frame")
-        bar.Size = UDim2.new(0.3, 0, 0.4, 0)
-        bar.Position = UDim2.new(0.65, 0, 0.3, 0)
-        bar.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-        bar.BorderSizePixel = 0
-        bar.Parent = label
-        
-        local fill = Instance.new("Frame")
-        fill.Size = UDim2.new(math.random(30, 100) / 100, 0, 1, 0)
-        fill.BackgroundColor3 = GetRarityColor(name)
-        fill.BorderSizePixel = 0
-        fill.Parent = bar
-        
-        local text = Instance.new("TextLabel")
-        text.Size = UDim2.new(1, 0, 1, 0)
-        text.BackgroundTransparency = 1
-        text.Text = fill.Size.X.Scale * 100 .. "%"
-        text.TextColor3 = Color3.fromRGB(255, 255, 255)
-        text.TextScaled = true
-        text.Font = Enum.Font.Gotham
-        text.Parent = fill
-    end
-end
-
-local function IsTarget(name)
-    if #Config.TargetEggs == 0 then return true end
-    for _, target in pairs(Config.TargetEggs) do
-        if name:find(target) then return true end
-    end
-    return false
-end
-
-local function AutoPickup()
-    if not Config.Enabled then return end
-    
-    local char = player.Character
-    if not char then return end
-    
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    
-    for _, egg in pairs(workspace:GetDescendants()) do
-        if egg:IsA("Tool") and egg.Name:find("Egg") and egg.Parent ~= player and egg.Parent ~= backpack then
-            if IsTarget(egg.Name) then
-                local handle = egg:FindFirstChild("Handle")
-                if handle and (root.Position - handle.Position).Magnitude <= Config.Range then
-                    egg.Parent = backpack
-                    task.wait(0.2)
-                    UpdateList()
-                end
-            end
-        end
-    end
-end
-
--- Events
-toggle.MouseButton1Click:Connect(function()
-    Config.Enabled = not Config.Enabled
-    toggle.Text = Config.Enabled and "ON" or "OFF"
-    toggle.BackgroundColor3 = Config.Enabled and Color3.fromRGB(76, 175, 80) or Color3.fromRGB(244, 67, 54)
-end)
-
-RunService.Heartbeat:Connect(AutoPickup)
-
-backpack.ChildAdded:Connect(function() task.wait(0.2) UpdateList() end)
-backpack.ChildRemoved:Connect(function() task.wait(0.2) UpdateList() end)
-
--- Initial
-task.wait(1)
-UpdateList()
-
-print("✅ Auto Pickup loaded!")
+print("✅ Auto Pickup Egg Fixed loaded!")
+print("📝 Masukkan nama egg di kotak, klik Set atau tekan Enter")
+print("🔧 Perbaikan: Cooldown, anti-spam, safe pickup")
