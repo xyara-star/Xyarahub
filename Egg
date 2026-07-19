@@ -12,13 +12,26 @@ local isAutoEquipEnabled = false
 local equipConnection = nil
 
 -- ==========================================
+-- HELPER: Case-insensitive string matching
+-- ==========================================
+local function matchItemName(itemName)
+    return string.lower(itemName):find(string.lower(ITEM_NAME)) ~= nil
+end
+
+-- ==========================================
 -- FUNCTION AUTO EQUIP / WELD
 -- ==========================================
 local function WeldItemToHand(item)
     local character = player.Character
-    if not character then return end
+    if not character then
+        warn("[AutoHold] Character not found")
+        return
+    end
     local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
+    if not humanoid then
+        warn("[AutoHold] Humanoid not found")
+        return
+    end
 
     local rightHand = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
     if rightHand and item:IsA("BasePart") then
@@ -27,38 +40,75 @@ local function WeldItemToHand(item)
         weld.Part0 = rightHand
         weld.Part1 = item
         weld.Parent = rightHand
-        item.CFrame = rightHand.CFrame * CFrame.new(0, -1, 0) -- posisi relatif
+        item.CFrame = rightHand.CFrame * CFrame.new(0, -1, 0)
+        print("[AutoHold] Item welded to hand:", item.Name)
     end
 end
 
 local function KeepEquipping()
     local character = player.Character
     if not character then return end
-    
+
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if not humanoid or humanoid.Health <= 0 then return end
-    
-    -- cek apakah sudah pegang tool
+
+    -- Cek apakah sudah pegang tool
     local toolInCharacter = character:FindFirstChildWhichIsA("Tool")
-    if not toolInCharacter then
-        local backpack = player:FindFirstChild("Backpack")
-        if backpack then
-            for _, item in ipairs(backpack:GetChildren()) do
-                if string.find(item.Name, ITEM_NAME) then
-                    if item:IsA("Tool") then
-                        humanoid:EquipTool(item)
-                    elseif item:IsA("BasePart") then
-                        WeldItemToHand(item)
-                    end
-                    break
+    if toolInCharacter then
+        return -- Sudah pegang, skip
+    end
+
+    -- Tunggu backpack selesai dimuat
+    local backpack = player:WaitForChild("Backpack", 5)
+    if not backpack then
+        warn("[AutoHold] Backpack not found after 5 seconds")
+        return
+    end
+
+    -- Cari item di backpack
+    local foundItem = nil
+    for _, item in ipairs(backpack:GetChildren()) do
+        if matchItemName(item.Name) then
+            foundItem = item
+            print("[AutoHold] Found matching item:", item.Name, "| Type:", item.ClassName)
+            break
+        end
+    end
+
+    if foundItem then
+        if foundItem:IsA("Tool") then
+            humanoid:EquipTool(foundItem)
+            print("[AutoHold] Tool equipped:", foundItem.Name)
+        elseif foundItem:IsA("BasePart") then
+            WeldItemToHand(foundItem)
+        else
+            -- Handle: Item mungkin adalah "Tool" versi lama (melalui .ClassName check)
+            warn("[AutoHold] Item is:", foundItem.ClassName, "- attempting direct parent move")
+            -- Coba sebagai Tool meskipun ClassName berbeda
+            if foundItem:IsA("Instance") then
+                local tool = foundItem:FindFirstChildWhichIsA("Tool")
+                if tool then
+                    humanoid:EquipTool(tool)
                 end
             end
+        end
+    else
+        -- DEBUG: Tampilkan semua item di backpack
+        local items = {}
+        for _, item in ipairs(backpack:GetChildren()) do
+            table.insert(items, item.Name)
+        end
+        if #items > 0 then
+            print("[AutoHold] No match. Backpack items:", table.concat(items, ", "))
+        else
+            print("[AutoHold] Backpack is empty")
         end
     end
 end
 
 local function StartAutoEquip()
     if not equipConnection then
+        print("[AutoHold] Auto equip started")
         equipConnection = RunService.Heartbeat:Connect(KeepEquipping)
     end
 end
@@ -67,6 +117,7 @@ local function StopAutoEquip()
     if equipConnection then
         equipConnection:Disconnect()
         equipConnection = nil
+        print("[AutoHold] Auto equip stopped")
     end
 end
 
@@ -123,7 +174,7 @@ BtnCorner.Parent = ToggleBtn
 
 ToggleBtn.MouseButton1Click:Connect(function()
     isAutoEquipEnabled = not isAutoEquipEnabled
-    
+
     if isAutoEquipEnabled then
         ToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
         ToggleBtn.Text = "STATUS: ON"
