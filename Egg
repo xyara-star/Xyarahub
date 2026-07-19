@@ -1,0 +1,189 @@
+-- Script Auto Pickup Egg Simple
+-- Tempatkan di StarterGui sebagai LocalScript
+
+local player = game.Players.LocalPlayer
+local backpack = player.Backpack
+local RunService = game:GetService("RunService")
+
+-- Config
+local Config = {
+    Enabled = true,
+    Range = 50,
+    TargetEggs = {} -- Kosongkan untuk semua egg
+}
+
+-- GUI Simple
+local gui = Instance.new("ScreenGui")
+gui.Parent = player.PlayerGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 200, 0, 250)
+frame.Position = UDim2.new(0.02, 0, 0.5, -125)
+frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+frame.BackgroundTransparency = 0.2
+frame.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = frame
+
+-- Title + Toggle
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 30)
+titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+titleBar.BackgroundTransparency = 0.3
+titleBar.Parent = frame
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(0.6, 0, 1, 0)
+title.BackgroundTransparency = 1
+title.Text = "Egg Pickup"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextScaled = true
+title.Font = Enum.Font.GothamBold
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = titleBar
+
+local toggle = Instance.new("TextButton")
+toggle.Size = UDim2.new(0.25, 0, 0.7, 0)
+toggle.Position = UDim2.new(0.72, 0, 0.15, 0)
+toggle.BackgroundColor3 = Color3.fromRGB(76, 175, 80)
+toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggle.Text = "ON"
+toggle.Font = Enum.Font.GothamBold
+toggle.TextScaled = true
+toggle.Parent = titleBar
+
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, 4)
+toggleCorner.Parent = toggle
+
+-- Egg List
+local scroll = Instance.new("ScrollingFrame")
+scroll.Size = UDim2.new(1, 0, 0, 200)
+scroll.Position = UDim2.new(0, 0, 0.12, 0)
+scroll.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+scroll.BackgroundTransparency = 0.5
+scroll.BorderSizePixel = 0
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+scroll.Parent = frame
+
+local layout = Instance.new("UIListLayout")
+layout.Padding = UDim.new(0, 2)
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Parent = scroll
+
+-- Functions
+local function GetRarityColor(name)
+    if name:find("Common") then return Color3.fromRGB(128, 128, 128) end
+    if name:find("Uncommon") then return Color3.fromRGB(0, 176, 80) end
+    if name:find("Rare") then return Color3.fromRGB(0, 112, 255) end
+    if name:find("Epic") then return Color3.fromRGB(156, 39, 176) end
+    if name:find("Legendary") then return Color3.fromRGB(255, 193, 7) end
+    if name:find("Mythic") then return Color3.fromRGB(255, 87, 34) end
+    return Color3.fromRGB(200, 200, 200)
+end
+
+local function UpdateList()
+    -- Clear
+    for _, child in pairs(scroll:GetChildren()) do
+        if child:IsA("TextLabel") then
+            child:Destroy()
+        end
+    end
+    
+    local eggs = {}
+    for _, item in pairs(backpack:GetChildren()) do
+        if item:IsA("Tool") and item.Name:find("Egg") then
+            table.insert(eggs, item.Name)
+        end
+    end
+    
+    scroll.CanvasSize = UDim2.new(0, 0, 0, #eggs * 22 + 5)
+    
+    for _, name in pairs(eggs) do
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(0.9, 0, 0, 20)
+        label.Position = UDim2.new(0.05, 0, 0, 0)
+        label.BackgroundColor3 = GetRarityColor(name)
+        label.BackgroundTransparency = 0.7
+        label.TextColor3 = Color3.fromRGB(255, 255, 255)
+        label.Text = name
+        label.TextScaled = true
+        label.Font = Enum.Font.Gotham
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = scroll
+        
+        -- Tax bar simple
+        local bar = Instance.new("Frame")
+        bar.Size = UDim2.new(0.3, 0, 0.4, 0)
+        bar.Position = UDim2.new(0.65, 0, 0.3, 0)
+        bar.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+        bar.BorderSizePixel = 0
+        bar.Parent = label
+        
+        local fill = Instance.new("Frame")
+        fill.Size = UDim2.new(math.random(30, 100) / 100, 0, 1, 0)
+        fill.BackgroundColor3 = GetRarityColor(name)
+        fill.BorderSizePixel = 0
+        fill.Parent = bar
+        
+        local text = Instance.new("TextLabel")
+        text.Size = UDim2.new(1, 0, 1, 0)
+        text.BackgroundTransparency = 1
+        text.Text = fill.Size.X.Scale * 100 .. "%"
+        text.TextColor3 = Color3.fromRGB(255, 255, 255)
+        text.TextScaled = true
+        text.Font = Enum.Font.Gotham
+        text.Parent = fill
+    end
+end
+
+local function IsTarget(name)
+    if #Config.TargetEggs == 0 then return true end
+    for _, target in pairs(Config.TargetEggs) do
+        if name:find(target) then return true end
+    end
+    return false
+end
+
+local function AutoPickup()
+    if not Config.Enabled then return end
+    
+    local char = player.Character
+    if not char then return end
+    
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    
+    for _, egg in pairs(workspace:GetDescendants()) do
+        if egg:IsA("Tool") and egg.Name:find("Egg") and egg.Parent ~= player and egg.Parent ~= backpack then
+            if IsTarget(egg.Name) then
+                local handle = egg:FindFirstChild("Handle")
+                if handle and (root.Position - handle.Position).Magnitude <= Config.Range then
+                    egg.Parent = backpack
+                    task.wait(0.2)
+                    UpdateList()
+                end
+            end
+        end
+    end
+end
+
+-- Events
+toggle.MouseButton1Click:Connect(function()
+    Config.Enabled = not Config.Enabled
+    toggle.Text = Config.Enabled and "ON" or "OFF"
+    toggle.BackgroundColor3 = Config.Enabled and Color3.fromRGB(76, 175, 80) or Color3.fromRGB(244, 67, 54)
+end)
+
+RunService.Heartbeat:Connect(AutoPickup)
+
+backpack.ChildAdded:Connect(function() task.wait(0.2) UpdateList() end)
+backpack.ChildRemoved:Connect(function() task.wait(0.2) UpdateList() end)
+
+-- Initial
+task.wait(1)
+UpdateList()
+
+print("✅ Auto Pickup loaded!")
