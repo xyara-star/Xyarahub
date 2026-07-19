@@ -1,40 +1,117 @@
+-- Pastikan ini LocalScript, bukan Script biasa
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- 1. Hapus UI lama
-if playerGui:FindFirstChild("TestUI") then playerGui.TestUI:Destroy() end
+-- KONFIGURASI NAMA ITEM
+local ITEM_NAME = "Rare Egg"
 
--- 2. Buat ScreenGui
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "TestUI"
-screenGui.IgnoreGuiInset = true -- Agar tidak terpotong
-screenGui.DisplayOrder = 999  -- Agar selalu di depan
-screenGui.Parent = playerGui
+-- VARIABLE CONTROL
+local isAutoEquipEnabled = false
+local equipConnection = nil
 
--- 3. Buat Frame (Kotak utama)
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 200, 0, 100)
-frame.Position = UDim2.new(0.5, -100, 0.5, -50) -- Tepat di tengah layar
-frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-frame.Visible = true
-frame.Parent = screenGui
+-- ==========================================
+-- FUNCTION AUTO EQUIP
+-- ==========================================
+local function KeepEquipping()
+    local character = player.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return end
+    
+    local toolInCharacter = character:FindFirstChild(ITEM_NAME)
+    if not toolInCharacter then
+        local backpack = player:FindFirstChild("Backpack")
+        if backpack then
+            local tool = backpack:FindFirstChild(ITEM_NAME)
+            if tool and tool:IsA("Tool") then
+                humanoid:EquipTool(tool)
+            end
+        end
+    end
+end
 
--- 4. Buat Text sebagai indikator
-local label = Instance.new("TextLabel")
-label.Size = UDim2.new(1, 0, 1, 0)
-label.Text = "UI BERHASIL MUNCUL"
-label.TextColor3 = Color3.fromRGB(255, 255, 255)
-label.BackgroundTransparency = 1
-label.Parent = frame
-
-print("Jika tidak ada kotak hitam di tengah layar, berarti executor Anda tidak mendukung pembuatan UI.")
+local function StartAutoEquip()
+    if not equipConnection then
         equipConnection = RunService.Heartbeat:Connect(KeepEquipping)
     end
 end
 
 local function StopAutoEquip()
+    if equipConnection then
+        equipConnection:Disconnect()
+        equipConnection = nil
+    end
+end
+
+-- ==========================================
+-- BIKIN UI MINIMALIS (Di PlayerGui)
+-- ==========================================
+if playerGui:FindFirstChild("XyaraMinUI") then
+    playerGui.XyaraMinUI:Destroy()
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "XyaraMinUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = playerGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 160, 0, 75)
+MainFrame.Position = UDim2.new(0.05, 0, 0.4, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(0, 8)
+Corner.Parent = MainFrame
+
+local Title = Instance.new("TextLabel")
+Title.Name = "Title"
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundTransparency = 1
+Title.Text = "Auto Hold Item"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 14
+Title.Font = Enum.Font.SourceSansBold
+Title.Parent = MainFrame
+
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "ToggleBtn"
+ToggleBtn.Size = UDim2.new(0.85, 0, 0, 30)
+ToggleBtn.Position = UDim2.new(0.075, 0, 0.45, 0)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+ToggleBtn.Text = "STATUS: OFF"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.TextSize = 13
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.Parent = MainFrame
+
+local BtnCorner = Instance.new("UICorner")
+BtnCorner.CornerRadius = UDim.new(0, 6)
+BtnCorner.Parent = ToggleBtn
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    isAutoEquipEnabled = not isAutoEquipEnabled
+    
+    if isAutoEquipEnabled then
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
+        ToggleBtn.Text = "STATUS: ON"
+        StartAutoEquip()
+    else
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        ToggleBtn.Text = "STATUS: OFF"
+        StopAutoEquip()
+    end
+end)
+
+print("UI Berhasil Dimuat!")local function StopAutoEquip()
     if equipConnection then
         equipConnection:Disconnect()
         equipConnection = nil
