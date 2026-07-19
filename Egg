@@ -1,49 +1,31 @@
 -- ═══════════════════════════════════════════════════════════════
---  GROW A GARDEN - AUTO PICKUP EGG
---  Simpan sebagai LocalScript di StarterGui atau StarterPlayerScripts
+--  GROW A GARDEN - AUTO PICKUP EGG v3.0
+--  Metode: ProximityPrompt, ClickDetector, TouchInterest, Remote
 -- ═══════════════════════════════════════════════════════════════
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
-local backpack = player:WaitForChild("Backpack")
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+local humanoid = character:WaitForChild("Humanoid")
 
 -- ═══════════════════════════════════════════════════════════════
 --  CONFIGURATION
 -- ═══════════════════════════════════════════════════════════════
 
 local Config = {
-    Enabled = true,
-    Range = 60,                    -- Jarak pickup (studs)
-    PickupCooldown = 0.15,         -- Cooldown antar pickup (detik)
-    CheckInterval = 0.05,          -- Interval pengecekan (detik)
-    AutoEquip = false,             -- Auto equip egg setelah pickup
-    ShowNotifications = true,      -- Tampilkan notifikasi pickup
-    UseTween = false,              -- Gunakan tween untuk smooth pickup (risiko detect)
-    
-    -- Target eggs (bisa multiple)
-    TargetEggs = {"Rare Egg"},
-    
-    -- Semua jenis egg yang ada di Grow a Garden
-    AllEggTypes = {
-        "Common Egg",
-        "Uncommon Egg", 
-        "Rare Egg",
-        "Legendary Egg",
-        "Mythical Egg",
-        "Event Egg",
-        "Golden Egg",
-        "Diamond Egg",
-        "Rainbow Egg",
-        "Void Egg",
-        "Cosmic Egg"
-    }
+    Enabled = false,               -- START IN DISABLED STATE!
+    Range = 20,                    -- Jarak pickup (studs)
+    CheckInterval = 0.1,           -- Interval pengecekan
+    PickupCooldown = 0.2,          -- Cooldown antar pickup
+    Method = "All",                -- "Prompt", "Click", "Touch", "All"
+    ShowDebug = true,              -- Tampilkan debug info
+    AutoWalkToEgg = false,         -- Auto jalan ke egg (RISIKO BAN)
 }
 
 -- ═══════════════════════════════════════════════════════════════
@@ -53,27 +35,26 @@ local Config = {
 local State = {
     LastPickup = 0,
     PickedCount = 0,
-    ProcessedEggs = {},
     IsSearching = false,
-    LastCheck = 0
+    LastCheck = 0,
+    CurrentTarget = nil,
 }
 
 -- ═══════════════════════════════════════════════════════════════
---  UI CREATION
+--  UI
 -- ═══════════════════════════════════════════════════════════════
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "EggPickerV2"
+ScreenGui.Name = "EggPickerV3"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.Parent = player:WaitForChild("PlayerGui")
 
 -- Main Frame
 local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 220, 0, 280)
-MainFrame.Position = UDim2.new(0.02, 0, 0.35, -140)
-MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+MainFrame.Size = UDim2.new(0, 240, 0, 320)
+MainFrame.Position = UDim2.new(0.02, 0, 0.3, -160)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 MainFrame.BackgroundTransparency = 0.05
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
@@ -85,14 +66,13 @@ MainCorner.CornerRadius = UDim.new(0, 10)
 MainCorner.Parent = MainFrame
 
 local MainStroke = Instance.new("UIStroke")
-MainStroke.Color = Color3.fromRGB(60, 60, 70)
+MainStroke.Color = Color3.fromRGB(80, 80, 90)
 MainStroke.Thickness = 1.5
 MainStroke.Parent = MainFrame
 
--- Title Bar
+-- Title
 local TitleBar = Instance.new("Frame")
-TitleBar.Name = "TitleBar"
-TitleBar.Size = UDim2.new(1, 0, 0, 32)
+TitleBar.Size = UDim2.new(1, 0, 0, 34)
 TitleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 TitleBar.BorderSizePixel = 0
 TitleBar.Parent = MainFrame
@@ -105,349 +85,379 @@ local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, -40, 1, 0)
 TitleLabel.Position = UDim2.new(0, 10, 0, 0)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "🥚 Egg Picker"
-TitleLabel.TextColor3 = Color3.fromRGB(255, 220, 100)
+TitleLabel.Text = "🥚 Egg Picker v3"
+TitleLabel.TextColor3 = Color3.fromRGB(255, 200, 80)
 TitleLabel.TextScaled = true
 TitleLabel.Font = Enum.Font.GothamBold
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 TitleLabel.Parent = TitleBar
 
--- Minimize Button
-local MinimizeBtn = Instance.new("TextButton")
-MinimizeBtn.Size = UDim2.new(0, 28, 0, 28)
-MinimizeBtn.Position = UDim2.new(1, -32, 0, 2)
-MinimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
-MinimizeBtn.Text = "−"
-MinimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-MinimizeBtn.TextScaled = true
-MinimizeBtn.Font = Enum.Font.GothamBold
-MinimizeBtn.Parent = TitleBar
-
-local MinCorner = Instance.new("UICorner")
-MinCorner.CornerRadius = UDim.new(0, 6)
-MinCorner.Parent = MinimizeBtn
-
--- Content Frame
-local ContentFrame = Instance.new("Frame")
-ContentFrame.Name = "Content"
-ContentFrame.Size = UDim2.new(1, -16, 1, -40)
-ContentFrame.Position = UDim2.new(0, 8, 0, 36)
-ContentFrame.BackgroundTransparency = 1
-ContentFrame.Parent = MainFrame
-
--- Toggle Button
+-- Toggle ON/OFF (START OFF!)
 local ToggleBtn = Instance.new("TextButton")
-ToggleBtn.Name = "ToggleBtn"
-ToggleBtn.Size = UDim2.new(0.45, 0, 0, 32)
-ToggleBtn.Position = UDim2.new(0, 0, 0, 0)
-ToggleBtn.BackgroundColor3 = Color3.fromRGB(76, 175, 80)
-ToggleBtn.Text = "ON"
+ToggleBtn.Size = UDim2.new(0.9, 0, 0, 36)
+ToggleBtn.Position = UDim2.new(0.05, 0, 0, 42)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(244, 67, 54) -- MERAH = OFF
+ToggleBtn.Text = "❌ OFF - Click to Enable"
 ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 ToggleBtn.TextScaled = true
 ToggleBtn.Font = Enum.Font.GothamBold
-ToggleBtn.Parent = ContentFrame
+ToggleBtn.Parent = MainFrame
 
 local ToggleCorner = Instance.new("UICorner")
-ToggleCorner.CornerRadius = UDim.new(0, 6)
+ToggleCorner.CornerRadius = UDim.new(0, 8)
 ToggleCorner.Parent = ToggleBtn
 
--- Status Label
-local StatusLabel = Instance.new("TextLabel")
-StatusLabel.Size = UDim2.new(0.5, 0, 0, 32)
-StatusLabel.Position = UDim2.new(0.5, 4, 0, 0)
-StatusLabel.BackgroundTransparency = 1
-StatusLabel.Text = "Target: Rare Egg"
-StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-StatusLabel.TextScaled = true
-StatusLabel.Font = Enum.Font.Gotham
-StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
-StatusLabel.Parent = ContentFrame
+-- Target Input
+local TargetLabel = Instance.new("TextLabel")
+TargetLabel.Size = UDim2.new(1, -16, 0, 18)
+TargetLabel.Position = UDim2.new(0, 8, 0, 86)
+TargetLabel.BackgroundTransparency = 1
+TargetLabel.Text = "Target Egg Name:"
+TargetLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+TargetLabel.TextScaled = true
+TargetLabel.Font = Enum.Font.Gotham
+TargetLabel.TextXAlignment = Enum.TextXAlignment.Left
+TargetLabel.Parent = MainFrame
 
--- Egg Input
-local InputLabel = Instance.new("TextLabel")
-InputLabel.Size = UDim2.new(1, 0, 0, 18)
-InputLabel.Position = UDim2.new(0, 0, 0, 40)
-InputLabel.BackgroundTransparency = 1
-InputLabel.Text = "Egg Name:"
-InputLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-InputLabel.TextScaled = true
-InputLabel.Font = Enum.Font.Gotham
-InputLabel.TextXAlignment = Enum.TextXAlignment.Left
-InputLabel.Parent = ContentFrame
-
-local EggInput = Instance.new("TextBox")
-EggInput.Size = UDim2.new(0.7, 0, 0, 28)
-EggInput.Position = UDim2.new(0, 0, 0, 60)
-EggInput.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-EggInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-EggInput.PlaceholderText = "e.g. Rare Egg"
-EggInput.PlaceholderColor3 = Color3.fromRGB(120, 120, 120)
-EggInput.Text = "Rare Egg"
-EggInput.Font = Enum.Font.Gotham
-EggInput.TextScaled = true
-EggInput.ClearTextOnFocus = false
-EggInput.Parent = ContentFrame
+local TargetInput = Instance.new("TextBox")
+TargetInput.Size = UDim2.new(0.65, 0, 0, 28)
+TargetInput.Position = UDim2.new(0.05, 0, 0, 106)
+TargetInput.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+TargetInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+TargetInput.PlaceholderText = "e.g. Rare Egg"
+TargetInput.PlaceholderColor3 = Color3.fromRGB(120, 120, 120)
+TargetInput.Text = "Rare Egg"
+TargetInput.Font = Enum.Font.Gotham
+TargetInput.TextScaled = true
+TargetInput.ClearTextOnFocus = false
+TargetInput.Parent = MainFrame
 
 local InputCorner = Instance.new("UICorner")
 InputCorner.CornerRadius = UDim.new(0, 6)
-InputCorner.Parent = EggInput
+InputCorner.Parent = TargetInput
 
 local SetBtn = Instance.new("TextButton")
 SetBtn.Size = UDim2.new(0.26, 0, 0, 28)
-SetBtn.Position = UDim2.new(0.74, 4, 0, 60)
+SetBtn.Position = UDim2.new(0.72, 0, 0, 106)
 SetBtn.BackgroundColor3 = Color3.fromRGB(66, 165, 245)
 SetBtn.Text = "Set"
 SetBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 SetBtn.TextScaled = true
 SetBtn.Font = Enum.Font.GothamBold
-SetBtn.Parent = ContentFrame
+SetBtn.Parent = MainFrame
 
 local SetCorner = Instance.new("UICorner")
 SetCorner.CornerRadius = UDim.new(0, 6)
 SetCorner.Parent = SetBtn
 
--- Quick Select Buttons
-local QuickLabel = Instance.new("TextLabel")
-QuickLabel.Size = UDim2.new(1, 0, 0, 18)
-QuickLabel.Position = UDim2.new(0, 0, 0, 96)
-QuickLabel.BackgroundTransparency = 1
-QuickLabel.Text = "Quick Select:"
-QuickLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-QuickLabel.TextScaled = true
-QuickLabel.Font = Enum.Font.Gotham
-QuickLabel.TextXAlignment = Enum.TextXAlignment.Left
-QuickLabel.Parent = ContentFrame
-
-local QuickFrame = Instance.new("Frame")
-QuickFrame.Size = UDim2.new(1, 0, 0, 60)
-QuickFrame.Position = UDim2.new(0, 0, 0, 116)
-QuickFrame.BackgroundTransparency = 1
-QuickFrame.Parent = ContentFrame
-
-local QuickBtns = {}
-local quickEggs = {"Common", "Rare", "Legendary", "Mythical"}
-
-for i, eggName in ipairs(quickEggs) do
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.23, -3, 0, 26)
-    btn.Position = UDim2.new((i-1) * 0.25, 0, 0, 0)
-    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
-    btn.Text = eggName
-    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
-    btn.TextScaled = true
-    btn.Font = Enum.Font.GothamBold
-    btn.Parent = QuickFrame
-    
-    local btnCorner = Instance.new("UICorner")
-    btnCorner.CornerRadius = UDim.new(0, 4)
-    btnCorner.Parent = btn
-    
-    btn.MouseButton1Click:Connect(function()
-        EggInput.Text = eggName .. " Egg"
-        UpdateTarget()
-    end)
-    
-    table.insert(QuickBtns, btn)
-end
-
--- Stats
-local StatsLabel = Instance.new("TextLabel")
-StatsLabel.Size = UDim2.new(1, 0, 0, 20)
-StatsLabel.Position = UDim2.new(0, 0, 0, 182)
-StatsLabel.BackgroundTransparency = 1
-StatsLabel.Text = "Picked: 0 | Range: 60"
-StatsLabel.TextColor3 = Color3.fromRGB(100, 255, 150)
-StatsLabel.TextScaled = true
-StatsLabel.Font = Enum.Font.Gotham
-StatsLabel.Parent = ContentFrame
-
--- Range Slider
+-- Range
 local RangeLabel = Instance.new("TextLabel")
-RangeLabel.Size = UDim2.new(1, 0, 0, 18)
-RangeLabel.Position = UDim2.new(0, 0, 0, 208)
+RangeLabel.Size = UDim2.new(1, -16, 0, 18)
+RangeLabel.Position = UDim2.new(0, 8, 0, 142)
 RangeLabel.BackgroundTransparency = 1
-RangeLabel.Text = "Range: 60"
+RangeLabel.Text = "Pickup Range: 20 studs"
 RangeLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
 RangeLabel.TextScaled = true
 RangeLabel.Font = Enum.Font.Gotham
 RangeLabel.TextXAlignment = Enum.TextXAlignment.Left
-RangeLabel.Parent = ContentFrame
+RangeLabel.Parent = MainFrame
 
 local RangeSlider = Instance.new("TextBox")
-RangeSlider.Size = UDim2.new(1, 0, 0, 24)
-RangeSlider.Position = UDim2.new(0, 0, 0, 228)
+RangeSlider.Size = UDim2.new(0.9, 0, 0, 26)
+RangeSlider.Position = UDim2.new(0.05, 0, 0, 162)
 RangeSlider.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
 RangeSlider.TextColor3 = Color3.fromRGB(255, 255, 255)
-RangeSlider.PlaceholderText = "50"
-RangeSlider.Text = "60"
+RangeSlider.Text = "20"
 RangeSlider.Font = Enum.Font.Gotham
 RangeSlider.TextScaled = true
-RangeSlider.Parent = ContentFrame
+RangeSlider.Parent = MainFrame
 
 local RangeCorner = Instance.new("UICorner")
 RangeCorner.CornerRadius = UDim.new(0, 6)
 RangeCorner.Parent = RangeSlider
 
+-- Stats
+local StatsLabel = Instance.new("TextLabel")
+StatsLabel.Size = UDim2.new(1, -16, 0, 20)
+StatsLabel.Position = UDim2.new(0, 8, 0, 196)
+StatsLabel.BackgroundTransparency = 1
+StatsLabel.Text = "Picked: 0 | Method: All"
+StatsLabel.TextColor3 = Color3.fromRGB(100, 255, 150)
+StatsLabel.TextScaled = true
+StatsLabel.Font = Enum.Font.GothamBold
+StatsLabel.Parent = MainFrame
+
+-- Debug Log
+local DebugLabel = Instance.new("TextLabel")
+DebugLabel.Size = UDim2.new(1, -16, 0, 60)
+DebugLabel.Position = UDim2.new(0, 8, 0, 222)
+DebugLabel.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+DebugLabel.BackgroundTransparency = 0.3
+DebugLabel.Text = "Debug: Waiting..."
+DebugLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+DebugLabel.TextScaled = false
+DebugLabel.TextSize = 11
+DebugLabel.Font = Enum.Font.Code
+DebugLabel.TextXAlignment = Enum.TextXAlignment.Left
+DebugLabel.TextYAlignment = Enum.TextYAlignment.Top
+DebugLabel.Parent = MainFrame
+
+local DebugCorner = Instance.new("UICorner")
+DebugCorner.CornerRadius = UDim.new(0, 6)
+DebugCorner.Parent = DebugLabel
+
 -- Footer
 local FooterLabel = Instance.new("TextLabel")
-FooterLabel.Size = UDim2.new(1, 0, 0, 16)
-FooterLabel.Position = UDim2.new(0, 0, 1, -16)
+FooterLabel.Size = UDim2.new(1, -16, 0, 16)
+FooterLabel.Position = UDim2.new(0, 8, 1, -20)
 FooterLabel.BackgroundTransparency = 1
-FooterLabel.Text = "Press RightShift to toggle UI"
-FooterLabel.TextColor3 = Color3.fromRGB(120, 120, 120)
+FooterLabel.Text = "Press RightShift to hide | START OFF!"
+FooterLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
 FooterLabel.TextScaled = true
 FooterLabel.Font = Enum.Font.Gotham
-FooterLabel.Parent = ContentFrame
-
--- Notification Frame
-local NotifFrame = Instance.new("Frame")
-NotifFrame.Size = UDim2.new(0, 200, 0, 40)
-NotifFrame.Position = UDim2.new(0.5, -100, 0.85, 0)
-NotifFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-NotifFrame.BackgroundTransparency = 1
-NotifFrame.BorderSizePixel = 0
-NotifFrame.Visible = false
-NotifFrame.Parent = ScreenGui
-
-local NotifCorner = Instance.new("UICorner")
-NotifCorner.CornerRadius = UDim.new(0, 8)
-NotifCorner.Parent = NotifFrame
-
-local NotifStroke = Instance.new("UIStroke")
-NotifStroke.Color = Color3.fromRGB(100, 255, 100)
-NotifStroke.Thickness = 1
-NotifStroke.Parent = NotifFrame
-
-local NotifText = Instance.new("TextLabel")
-NotifText.Size = UDim2.new(1, -10, 1, 0)
-NotifText.Position = UDim2.new(0, 5, 0, 0)
-NotifText.BackgroundTransparency = 1
-NotifText.Text = ""
-NotifText.TextColor3 = Color3.fromRGB(255, 255, 255)
-NotifText.TextScaled = true
-NotifText.Font = Enum.Font.GothamBold
-NotifText.Parent = NotifFrame
+FooterLabel.Parent = MainFrame
 
 -- ═══════════════════════════════════════════════════════════════
 --  FUNCTIONS
 -- ═══════════════════════════════════════════════════════════════
 
-local function ShowNotification(text, color)
-    if not Config.ShowNotifications then return end
-    color = color or Color3.fromRGB(100, 255, 100)
-    
-    NotifText.Text = text
-    NotifStroke.Color = color
-    NotifFrame.Visible = true
-    NotifFrame.BackgroundTransparency = 0.1
-    
-    task.spawn(function()
-        task.wait(1.5)
-        for i = 1, 10 do
-            NotifFrame.BackgroundTransparency = 0.1 + (i * 0.09)
-            task.wait(0.05)
-        end
-        NotifFrame.Visible = false
-    end)
-end
-
-local function UpdateTarget()
-    local inputText = EggInput.Text
-    if inputText ~= "" then
-        Config.TargetEggs = {inputText}
-        StatusLabel.Text = "Target: " .. inputText
-        ShowNotification("🎯 Target: " .. inputText, Color3.fromRGB(100, 200, 255))
-        print("[EggPicker] Target set to: " .. inputText)
+local function UpdateDebug(text)
+    if Config.ShowDebug then
+        DebugLabel.Text = "Debug: " .. text
+        print("[EggPicker] " .. text)
     end
 end
 
 local function IsTarget(name)
-    if #Config.TargetEggs == 0 then return true end
-    for _, target in pairs(Config.TargetEggs) do
-        if name:find(target) then return true end
+    local target = TargetInput.Text
+    if target == "" or target == "All" then return true end
+    return name:find(target) ~= nil
+end
+
+-- ═══════════════════════════════════════════════════════════════
+--  METHOD 1: ProximityPrompt (paling umum di Grow a Garden)
+-- ═══════════════════════════════════════════════════════════════
+
+local function TryPromptPickup(egg)
+    local prompt = egg:FindFirstChildWhichIsA("ProximityPrompt", true)
+    if not prompt then
+        -- Cek di children langsung
+        for _, child in pairs(egg:GetChildren()) do
+            if child:IsA("ProximityPrompt") then
+                prompt = child
+                break
+            end
+        end
     end
+    
+    if prompt then
+        local success, err = pcall(function()
+            -- Method 1a: Fire prompt directly
+            fireproximityprompt(prompt)
+        end)
+        
+        if success then
+            UpdateDebug("✅ Prompt fired for " .. egg.Name)
+            return true
+        else
+            UpdateDebug("❌ Prompt fire failed: " .. tostring(err))
+        end
+    end
+    
     return false
 end
 
-local function IsValidEgg(egg)
-    -- Cek apakah objek masih valid
-    if not egg or not egg.Parent then return false end
-    
-    -- Cek apakah sudah di inventory
-    if egg.Parent == player or egg.Parent == backpack then return false end
-    
-    -- Cek apakah dipegang player lain
-    local parent = egg.Parent
-    if parent:IsA("Model") then
-        local humanoid = parent:FindFirstChildOfClass("Humanoid")
-        if humanoid then return false end
+-- ═══════════════════════════════════════════════════════════════
+--  METHOD 2: ClickDetector
+-- ═══════════════════════════════════════════════════════════════
+
+local function TryClickPickup(egg)
+    local clickDetector = egg:FindFirstChildWhichIsA("ClickDetector", true)
+    if not clickDetector then
+        for _, child in pairs(egg:GetChildren()) do
+            if child:IsA("ClickDetector") then
+                clickDetector = child
+                break
+            end
+        end
     end
     
-    -- Cek apakah parent adalah character player lain
-    if parent:FindFirstChild("HumanoidRootPart") then return false end
+    if clickDetector then
+        local success = pcall(function()
+            fireclickdetector(clickDetector)
+        end)
+        if success then
+            UpdateDebug("✅ ClickDetector fired for " .. egg.Name)
+            return true
+        end
+    end
     
-    return true
+    return false
 end
 
-local function TryPickupEgg(egg)
-    if not IsValidEgg(egg) then return false end
-    if State.ProcessedEggs[egg] then return false end
+-- ═══════════════════════════════════════════════════════════════
+--  METHOD 3: TouchInterest (untuk part yang bisa di-touch)
+-- ═══════════════════════════════════════════════════════════════
+
+local function TryTouchPickup(egg)
+    local handle = egg:FindFirstChild("Handle") or egg:FindFirstChildWhichIsA("BasePart")
+    if not handle then return false end
     
+    local touchInterest = handle:FindFirstChild("TouchInterest")
+    if touchInterest then
+        local success = pcall(function()
+            -- Simulasi touch dengan firetouchinterest
+            firetouchinterest(humanoidRootPart, handle, 0) -- Begin touch
+            task.wait(0.05)
+            firetouchinterest(humanoidRootPart, handle, 1) -- End touch
+        end)
+        if success then
+            UpdateDebug("✅ Touch fired for " .. egg.Name)
+            return true
+        end
+    end
+    
+    return false
+end
+
+-- ═══════════════════════════════════════════════════════════════
+--  METHOD 4: RemoteEvent (cari remote untuk pickup)
+-- ═══════════════════════════════════════════════════════════════
+
+local function TryRemotePickup(egg)
+    -- Cari common remote names
+    local remoteNames = {
+        "Pickup", "PickUp", "Collect", "Grab", "Take",
+        "EggPickup", "ItemPickup", "ToolPickup",
+        "Interact", "Use", "Activate"
+    }
+    
+    local remotesFolder = ReplicatedStorage:FindFirstChild("Remotes") 
+        or ReplicatedStorage:FindFirstChild("RemoteEvents")
+        or ReplicatedStorage:FindFirstChild("Events")
+    
+    if remotesFolder then
+        for _, name in pairs(remoteNames) do
+            local remote = remotesFolder:FindFirstChild(name)
+            if remote and remote:IsA("RemoteEvent") then
+                local success = pcall(function()
+                    remote:FireServer(egg)
+                end)
+                if success then
+                    UpdateDebug("✅ Remote fired: " .. name)
+                    return true
+                end
+            end
+        end
+    end
+    
+    -- Cek langsung di ReplicatedStorage
+    for _, name in pairs(remoteNames) do
+        local remote = ReplicatedStorage:FindFirstChild(name)
+        if remote and remote:IsA("RemoteEvent") then
+            local success = pcall(function()
+                remote:FireServer(egg)
+            end)
+            if success then
+                UpdateDebug("✅ Remote fired: " .. name)
+                return true
+            end
+        end
+    end
+    
+    return false
+end
+
+-- ═══════════════════════════════════════════════════════════════
+--  METHOD 5: Tool Parent (hanya jika egg adalah Tool)
+-- ═══════════════════════════════════════════════════════════════
+
+local function TryToolPickup(egg)
+    if not egg:IsA("Tool") then return false end
+    
+    -- JANGAN paksa parent ke backpack! Ini yang menyebabkan bug!
+    -- Sebaliknya, coba equip tool jika sudah di dekat
     local handle = egg:FindFirstChild("Handle") or egg:FindFirstChildWhichIsA("BasePart")
     if not handle then return false end
     
     local distance = (humanoidRootPart.Position - handle.Position).Magnitude
-    if distance > Config.Range then return false end
+    if distance > 5 then return false end -- Hanya jika sangat dekat
     
-    -- Cek nama target
-    if not IsTarget(egg.Name) then return false end
-    
-    -- Pickup dengan pcall untuk safety
+    -- Coba equip tool (bukan pindah parent!)
     local success = pcall(function()
-        egg.Parent = backpack
+        humanoid:EquipTool(egg)
     end)
     
     if success then
-        State.PickedCount = State.PickedCount + 1
-        State.ProcessedEggs[egg] = true
-        State.LastPickup = tick()
-        
-        -- Update stats
-        StatsLabel.Text = "Picked: " .. State.PickedCount .. " | Range: " .. Config.Range
-        
-        -- Auto equip jika diaktifkan
-        if Config.AutoEquip then
-            task.spawn(function()
-                task.wait(0.1)
-                pcall(function()
-                    humanoid:EquipTool(egg)
-                end)
-            end)
-        end
-        
-        -- Cleanup processed setelah beberapa detik
-        task.delay(3, function()
-            State.ProcessedEggs[egg] = nil
-        end)
-        
+        UpdateDebug("✅ Tool equipped: " .. egg.Name)
         return true
     end
     
     return false
 end
 
-local function FindAndPickupEggs()
+-- ═══════════════════════════════════════════════════════════════
+--  MAIN PICKUP FUNCTION
+-- ═══════════════════════════════════════════════════════════════
+
+local function AttemptPickup(egg)
+    if not egg or not egg.Parent then return false end
+    
+    local now = tick()
+    if now - State.LastPickup < Config.PickupCooldown then return false end
+    
+    -- Cek jarak
+    local handle = egg:FindFirstChild("Handle") or egg:FindFirstChildWhichIsA("BasePart")
+    if not handle then return false end
+    
+    local distance = (humanoidRootPart.Position - handle.Position).Magnitude
+    if distance > Config.Range then return false end
+    
+    -- Cek target
+    if not IsTarget(egg.Name) then return false end
+    
+    UpdateDebug("Found: " .. egg.Name .. " | Dist: " .. math.floor(distance))
+    
+    -- Coba semua metode sesuai config
+    local methods = {
+        Prompt = {TryPromptPickup},
+        Click = {TryClickPickup},
+        Touch = {TryTouchPickup},
+        Remote = {TryRemotePickup},
+        Tool = {TryToolPickup},
+        All = {TryPromptPickup, TryClickPickup, TryTouchPickup, TryRemotePickup, TryToolPickup}
+    }
+    
+    local toTry = methods[Config.Method] or methods.All
+    
+    for _, method in pairs(toTry) do
+        local success = method(egg)
+        if success then
+            State.LastPickup = now
+            State.PickedCount = State.PickedCount + 1
+            StatsLabel.Text = "Picked: " .. State.PickedCount .. " | Method: " .. Config.Method
+            return true
+        end
+    end
+    
+    return false
+end
+
+-- ═══════════════════════════════════════════════════════════════
+--  SCANNING
+-- ═══════════════════════════════════════════════════════════════
+
+local function ScanForEggs()
     if not Config.Enabled then return end
     if State.IsSearching then return end
     
     local now = tick()
-    if now - State.LastPickup < Config.PickupCooldown then return end
     if now - State.LastCheck < Config.CheckInterval then return end
     State.LastCheck = now
     
     State.IsSearching = true
     
-    -- Update character reference
+    -- Update references
     character = player.Character
     if not character then 
         State.IsSearching = false
@@ -455,78 +465,93 @@ local function FindAndPickupEggs()
     end
     
     humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
-    if not humanoidRootPart then 
+    humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoidRootPart or not humanoid then 
         State.IsSearching = false
         return 
     end
     
     -- Cari egg di workspace
-    local descendants = workspace:GetDescendants()
-    local pickedAny = false
-    
-    for _, obj in pairs(descendants) do
+    local found = false
+    for _, obj in pairs(workspace:GetDescendants()) do
         if not Config.Enabled then break end
         
-        -- Cek apakah objek adalah Tool dengan nama mengandung "Egg"
-        if obj:IsA("Tool") and obj.Name:find("Egg") then
-            if TryPickupEgg(obj) then
-                pickedAny = true
-                ShowNotification("✅ Picked: " .. obj.Name)
-                break -- Pickup satu per frame
+        -- Cek apakah nama mengandung "Egg"
+        if obj.Name:find("Egg") and obj ~= player then
+            -- Skip jika sudah di inventory
+            if obj.Parent == player or obj.Parent == player:FindFirstChild("Backpack") then
+                continue
+            end
+            
+            -- Skip jadi bagian dari karakter lain
+            if obj.Parent and obj.Parent:FindFirstChild("Humanoid") then
+                continue
+            end
+            
+            if AttemptPickup(obj) then
+                found = true
+                break -- Satu per frame
             end
         end
+    end
+    
+    if not found then
+        UpdateDebug("Scanning... No eggs in range")
     end
     
     State.IsSearching = false
 end
 
 -- ═══════════════════════════════════════════════════════════════
---  EVENT CONNECTIONS
+--  EVENTS
 -- ═══════════════════════════════════════════════════════════════
 
--- Toggle Button
+-- Toggle
 ToggleBtn.MouseButton1Click:Connect(function()
     Config.Enabled = not Config.Enabled
-    ToggleBtn.Text = Config.Enabled and "ON" or "OFF"
-    ToggleBtn.BackgroundColor3 = Config.Enabled and Color3.fromRGB(76, 175, 80) or Color3.fromRGB(244, 67, 54)
-    ShowNotification(Config.Enabled and "✅ Auto Pickup ON" or "❌ Auto Pickup OFF", 
-        Config.Enabled and Color3.fromRGB(76, 175, 80) or Color3.fromRGB(244, 67, 54))
-end)
-
--- Set Button
-SetBtn.MouseButton1Click:Connect(UpdateTarget)
-
--- Enter key di input
-EggInput.FocusLost:Connect(function(enterPressed)
-    if enterPressed then
-        UpdateTarget()
+    
+    if Config.Enabled then
+        ToggleBtn.Text = "✅ ON - Auto Pickup Active"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(76, 175, 80)
+        FooterLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        UpdateDebug("Auto Pickup ENABLED")
+    else
+        ToggleBtn.Text = "❌ OFF - Click to Enable"
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(244, 67, 54)
+        FooterLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        UpdateDebug("Auto Pickup DISABLED")
     end
 end)
 
--- Range Slider
+-- Set Target
+SetBtn.MouseButton1Click:Connect(function()
+    local target = TargetInput.Text
+    if target ~= "" then
+        UpdateDebug("Target set: " .. target)
+        StatsLabel.Text = "Picked: " .. State.PickedCount .. " | Target: " .. target
+    end
+end)
+
+TargetInput.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        SetBtn.MouseButton1Click:Fire()
+    end
+end)
+
+-- Range
 RangeSlider.FocusLost:Connect(function()
     local num = tonumber(RangeSlider.Text)
     if num then
-        Config.Range = math.clamp(num, 10, 500)
+        Config.Range = math.clamp(num, 5, 200)
         RangeSlider.Text = tostring(Config.Range)
-        RangeLabel.Text = "Range: " .. Config.Range
-        StatsLabel.Text = "Picked: " .. State.PickedCount .. " | Range: " .. Config.Range
-        ShowNotification("📏 Range set to: " .. Config.Range, Color3.fromRGB(255, 200, 100))
+        RangeLabel.Text = "Pickup Range: " .. Config.Range .. " studs"
+        UpdateDebug("Range set: " .. Config.Range)
     else
         RangeSlider.Text = tostring(Config.Range)
     end
 end)
 
--- Minimize
-local Minimized = false
-MinimizeBtn.MouseButton1Click:Connect(function()
-    Minimized = not Minimized
-    ContentFrame.Visible = not Minimized
-    MinimizeBtn.Text = Minimized and "+" or "−"
-    MainFrame.Size = Minimized and UDim2.new(0, 220, 0, 36) or UDim2.new(0, 220, 0, 280)
-end)
-
--- Toggle UI dengan RightShift
+-- Toggle UI
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.RightShift then
@@ -538,25 +563,24 @@ end)
 player.CharacterAdded:Connect(function(newChar)
     character = newChar
     humanoidRootPart = newChar:WaitForChild("HumanoidRootPart")
-    backpack = player:WaitForChild("Backpack")
-    -- Reset processed eggs
-    State.ProcessedEggs = {}
+    humanoid = newChar:WaitForChild("Humanoid")
+    UpdateDebug("Character respawned")
 end)
 
--- Heartbeat loop
-RunService.Heartbeat:Connect(FindAndPickupEggs)
+-- Heartbeat
+RunService.Heartbeat:Connect(ScanForEggs)
 
 -- ═══════════════════════════════════════════════════════════════
---  INITIALIZATION
+--  INIT
 -- ═══════════════════════════════════════════════════════════════
 
 task.wait(0.5)
-StatusLabel.Text = "Target: Rare Egg"
-print("═══════════════════════════════════════")
-print("  🥚 EGG PICKER v2.0 - GROW A GARDEN")
-print("═══════════════════════════════════════")
-print("✅ Script loaded successfully!")
-print("🎯 Default target: Rare Egg")
-print("📝 Enter egg name and click Set")
-print("⌨️  Press RightShift to toggle UI")
-print("═══════════════════════════════════════")
+UpdateDebug("Ready! START WITH OFF, then enable")
+print("═══════════════════════════════════════════")
+print("  🥚 EGG PICKER v3.0 - GROW A GARDEN")
+print("═══════════════════════════════════════════")
+print("⚠️  PENTING: Script dimulai dalam keadaan OFF!")
+print("⚠️  Klik tombol merah untuk mengaktifkan")
+print("📝 Masukkan nama egg lalu klik Set")
+print("🔍 Script akan mencoba metode: Prompt, Click, Touch, Remote")
+print("═══════════════════════════════════════════")
