@@ -4,10 +4,26 @@ local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- KONFIGURASI NAMA ITEM
-local ITEM_NAME = "Rare Egg"
+-- DAFTAR NAMA EGG SESUAI TAMPILAN LAYAR
+local EGG_LIST = {
+    "Rare Egg",
+    "Bird Egg",
+    "Common Summer Egg",
+    "Golden Egg",
+    "Enchanted Egg",
+    "Common Egg",
+    "Coastal Egg",
+    "Fall Egg",
+    "Legendary Egg",
+    "Moon Egg",
+    "Mythical Egg",
+    "Bug Egg",
+    "Gem Egg",
+    "Jungle Egg"
+}
 
 -- VARIABLE CONTROL
+local selectedEggIndex = 1
 local isAutoEquipEnabled = false
 local equipConnection = nil
 
@@ -15,7 +31,9 @@ local equipConnection = nil
 -- HELPER: Case-insensitive string matching
 -- ==========================================
 local function matchItemName(itemName)
-    return string.lower(itemName):find(string.lower(ITEM_NAME)) ~= nil
+    local targetEgg = EGG_LIST[selectedEggIndex]
+    if not targetEgg then return false end
+    return string.lower(itemName):find(string.lower(targetEgg)) ~= nil
 end
 
 -- ==========================================
@@ -23,15 +41,7 @@ end
 -- ==========================================
 local function WeldItemToHand(item)
     local character = player.Character
-    if not character then
-        warn("[AutoHold] Character not found")
-        return
-    end
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then
-        warn("[AutoHold] Humanoid not found")
-        return
-    end
+    if not character then return end
 
     local rightHand = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
     if rightHand and item:IsA("BasePart") then
@@ -41,7 +51,6 @@ local function WeldItemToHand(item)
         weld.Part1 = item
         weld.Parent = rightHand
         item.CFrame = rightHand.CFrame * CFrame.new(0, -1, 0)
-        print("[AutoHold] Item welded to hand:", item.Name)
     end
 end
 
@@ -52,25 +61,20 @@ local function KeepEquipping()
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if not humanoid or humanoid.Health <= 0 then return end
 
-    -- Cek apakah sudah pegang tool
+    -- Cek apakah sedang memegang tool yang sesuai
     local toolInCharacter = character:FindFirstChildWhichIsA("Tool")
-    if toolInCharacter then
-        return -- Sudah pegang, skip
-    end
-
-    -- Tunggu backpack selesai dimuat
-    local backpack = player:WaitForChild("Backpack", 5)
-    if not backpack then
-        warn("[AutoHold] Backpack not found after 5 seconds")
+    if toolInCharacter and matchItemName(toolInCharacter.Name) then
         return
     end
 
-    -- Cari item di backpack
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return end
+
+    -- Cari item yang dipilih di backpack
     local foundItem = nil
     for _, item in ipairs(backpack:GetChildren()) do
         if matchItemName(item.Name) then
             foundItem = item
-            print("[AutoHold] Found matching item:", item.Name, "| Type:", item.ClassName)
             break
         end
     end
@@ -78,37 +82,19 @@ local function KeepEquipping()
     if foundItem then
         if foundItem:IsA("Tool") then
             humanoid:EquipTool(foundItem)
-            print("[AutoHold] Tool equipped:", foundItem.Name)
         elseif foundItem:IsA("BasePart") then
             WeldItemToHand(foundItem)
         else
-            -- Handle: Item mungkin adalah "Tool" versi lama (melalui .ClassName check)
-            warn("[AutoHold] Item is:", foundItem.ClassName, "- attempting direct parent move")
-            -- Coba sebagai Tool meskipun ClassName berbeda
-            if foundItem:IsA("Instance") then
-                local tool = foundItem:FindFirstChildWhichIsA("Tool")
-                if tool then
-                    humanoid:EquipTool(tool)
-                end
+            local tool = foundItem:FindFirstChildWhichIsA("Tool")
+            if tool then
+                humanoid:EquipTool(tool)
             end
-        end
-    else
-        -- DEBUG: Tampilkan semua item di backpack
-        local items = {}
-        for _, item in ipairs(backpack:GetChildren()) do
-            table.insert(items, item.Name)
-        end
-        if #items > 0 then
-            print("[AutoHold] No match. Backpack items:", table.concat(items, ", "))
-        else
-            print("[AutoHold] Backpack is empty")
         end
     end
 end
 
 local function StartAutoEquip()
     if not equipConnection then
-        print("[AutoHold] Auto equip started")
         equipConnection = RunService.Heartbeat:Connect(KeepEquipping)
     end
 end
@@ -117,12 +103,11 @@ local function StopAutoEquip()
     if equipConnection then
         equipConnection:Disconnect()
         equipConnection = nil
-        print("[AutoHold] Auto equip stopped")
     end
 end
 
 -- ==========================================
--- BIKIN UI MINIMALIS
+-- BIKIN UI MINIMALIS DENGAN SELEKSI EGG
 -- ==========================================
 if playerGui:FindFirstChild("XyaraMinUI") then
     playerGui.XyaraMinUI:Destroy()
@@ -135,7 +120,7 @@ ScreenGui.Parent = playerGui
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 160, 0, 75)
+MainFrame.Size = UDim2.new(0, 180, 0, 110)
 MainFrame.Position = UDim2.new(0.05, 0, 0.4, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 MainFrame.BorderSizePixel = 0
@@ -149,7 +134,7 @@ Corner.Parent = MainFrame
 
 local Title = Instance.new("TextLabel")
 Title.Name = "Title"
-Title.Size = UDim2.new(1, 0, 0, 30)
+Title.Size = UDim2.new(1, 0, 0, 25)
 Title.BackgroundTransparency = 1
 Title.Text = "Auto Hold Item"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -157,10 +142,35 @@ Title.TextSize = 14
 Title.Font = Enum.Font.SourceSansBold
 Title.Parent = MainFrame
 
+-- Tombol Pemilih Egg
+local SelectBtn = Instance.new("TextButton")
+SelectBtn.Name = "SelectBtn"
+SelectBtn.Size = UDim2.new(0.9, 0, 0, 30)
+SelectBtn.Position = UDim2.new(0.05, 0, 0.28, 0)
+SelectBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+SelectBtn.Text = "Egg: " .. EGG_LIST[selectedEggIndex]
+SelectBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SelectBtn.TextSize = 12
+SelectBtn.Font = Enum.Font.SourceSans
+SelectBtn.Parent = MainFrame
+
+local SelectCorner = Instance.new("UICorner")
+SelectCorner.CornerRadius = UDim.new(0, 6)
+SelectCorner.Parent = SelectBtn
+
+SelectBtn.MouseButton1Click:Connect(function()
+    selectedEggIndex = selectedEggIndex + 1
+    if selectedEggIndex > #EGG_LIST then
+        selectedEggIndex = 1
+    end
+    SelectBtn.Text = "Egg: " .. EGG_LIST[selectedEggIndex]
+end)
+
+-- Tombol Status On/Off
 local ToggleBtn = Instance.new("TextButton")
 ToggleBtn.Name = "ToggleBtn"
-ToggleBtn.Size = UDim2.new(0.85, 0, 0, 30)
-ToggleBtn.Position = UDim2.new(0.075, 0, 0.45, 0)
+ToggleBtn.Size = UDim2.new(0.9, 0, 0, 30)
+ToggleBtn.Position = UDim2.new(0.05, 0, 0.62, 0)
 ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 ToggleBtn.Text = "STATUS: OFF"
 ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -185,5 +195,3 @@ ToggleBtn.MouseButton1Click:Connect(function()
         StopAutoEquip()
     end
 end)
-
-print("UI & Auto Hold siap dipakai!")
