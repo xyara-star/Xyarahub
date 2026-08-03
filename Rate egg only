@@ -1,0 +1,189 @@
+-- LocalScript (StarterPlayerScripts)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- KONFIGURASI NAMA ITEM
+local ITEM_NAME = "Rare Egg"
+
+-- VARIABLE CONTROL
+local isAutoEquipEnabled = false
+local equipConnection = nil
+
+-- ==========================================
+-- HELPER: Case-insensitive string matching
+-- ==========================================
+local function matchItemName(itemName)
+    return string.lower(itemName):find(string.lower(ITEM_NAME)) ~= nil
+end
+
+-- ==========================================
+-- FUNCTION AUTO EQUIP / WELD
+-- ==========================================
+local function WeldItemToHand(item)
+    local character = player.Character
+    if not character then
+        warn("[AutoHold] Character not found")
+        return
+    end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then
+        warn("[AutoHold] Humanoid not found")
+        return
+    end
+
+    local rightHand = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
+    if rightHand and item:IsA("BasePart") then
+        item.Parent = character
+        local weld = Instance.new("WeldConstraint")
+        weld.Part0 = rightHand
+        weld.Part1 = item
+        weld.Parent = rightHand
+        item.CFrame = rightHand.CFrame * CFrame.new(0, -1, 0)
+        print("[AutoHold] Item welded to hand:", item.Name)
+    end
+end
+
+local function KeepEquipping()
+    local character = player.Character
+    if not character then return end
+
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return end
+
+    -- Cek apakah sudah pegang tool
+    local toolInCharacter = character:FindFirstChildWhichIsA("Tool")
+    if toolInCharacter then
+        return -- Sudah pegang, skip
+    end
+
+    -- Tunggu backpack selesai dimuat
+    local backpack = player:WaitForChild("Backpack", 5)
+    if not backpack then
+        warn("[AutoHold] Backpack not found after 5 seconds")
+        return
+    end
+
+    -- Cari item di backpack
+    local foundItem = nil
+    for _, item in ipairs(backpack:GetChildren()) do
+        if matchItemName(item.Name) then
+            foundItem = item
+            print("[AutoHold] Found matching item:", item.Name, "| Type:", item.ClassName)
+            break
+        end
+    end
+
+    if foundItem then
+        if foundItem:IsA("Tool") then
+            humanoid:EquipTool(foundItem)
+            print("[AutoHold] Tool equipped:", foundItem.Name)
+        elseif foundItem:IsA("BasePart") then
+            WeldItemToHand(foundItem)
+        else
+            -- Handle: Item mungkin adalah "Tool" versi lama (melalui .ClassName check)
+            warn("[AutoHold] Item is:", foundItem.ClassName, "- attempting direct parent move")
+            -- Coba sebagai Tool meskipun ClassName berbeda
+            if foundItem:IsA("Instance") then
+                local tool = foundItem:FindFirstChildWhichIsA("Tool")
+                if tool then
+                    humanoid:EquipTool(tool)
+                end
+            end
+        end
+    else
+        -- DEBUG: Tampilkan semua item di backpack
+        local items = {}
+        for _, item in ipairs(backpack:GetChildren()) do
+            table.insert(items, item.Name)
+        end
+        if #items > 0 then
+            print("[AutoHold] No match. Backpack items:", table.concat(items, ", "))
+        else
+            print("[AutoHold] Backpack is empty")
+        end
+    end
+end
+
+local function StartAutoEquip()
+    if not equipConnection then
+        print("[AutoHold] Auto equip started")
+        equipConnection = RunService.Heartbeat:Connect(KeepEquipping)
+    end
+end
+
+local function StopAutoEquip()
+    if equipConnection then
+        equipConnection:Disconnect()
+        equipConnection = nil
+        print("[AutoHold] Auto equip stopped")
+    end
+end
+
+-- ==========================================
+-- BIKIN UI MINIMALIS
+-- ==========================================
+if playerGui:FindFirstChild("XyaraMinUI") then
+    playerGui.XyaraMinUI:Destroy()
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "XyaraMinUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = playerGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 160, 0, 75)
+MainFrame.Position = UDim2.new(0.05, 0, 0.4, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(0, 8)
+Corner.Parent = MainFrame
+
+local Title = Instance.new("TextLabel")
+Title.Name = "Title"
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundTransparency = 1
+Title.Text = "Auto Hold Item"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 14
+Title.Font = Enum.Font.SourceSansBold
+Title.Parent = MainFrame
+
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "ToggleBtn"
+ToggleBtn.Size = UDim2.new(0.85, 0, 0, 30)
+ToggleBtn.Position = UDim2.new(0.075, 0, 0.45, 0)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+ToggleBtn.Text = "STATUS: OFF"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.TextSize = 13
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.Parent = MainFrame
+
+local BtnCorner = Instance.new("UICorner")
+BtnCorner.CornerRadius = UDim.new(0, 6)
+BtnCorner.Parent = ToggleBtn
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    isAutoEquipEnabled = not isAutoEquipEnabled
+
+    if isAutoEquipEnabled then
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
+        ToggleBtn.Text = "STATUS: ON"
+        StartAutoEquip()
+    else
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        ToggleBtn.Text = "STATUS: OFF"
+        StopAutoEquip()
+    end
+end)
+
+print("UI & Auto Hold siap dipakai!")
