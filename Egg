@@ -25,11 +25,7 @@ local EGG_LIST = {
 -- VARIABLE CONTROL
 local selectedEggIndex = 1
 local isAutoEquipEnabled = false
-local equipThread = nil
-
--- KONFIGURASI DELAY (Bisa disesuaikan dalam detik)
-local HOLD_DURATION = 1.5   -- Berapa lama item dipegang sebelum dilepas
-local RELEASE_DURATION = 0.5 -- Berapa lama jeda lepas item agar SC Auto Sell bisa bekerja
+local equipConnection = nil
 
 -- ==========================================
 -- HELPER: Case-insensitive string matching
@@ -41,23 +37,20 @@ local function matchItemName(itemName)
 end
 
 -- ==========================================
--- FUNCTION AUTO EQUIP / WELD WITH DELAY
+-- FUNCTION AUTO EQUIP / WELD (Enhanced dari script 1)
 -- ==========================================
-local function UnequipCurrentTool(humanoid, character)
-    if not humanoid then return end
-    
-    -- Lepas Tool resmi
-    humanoid:UnequipTools()
-    
-    -- Bersihkan jika ada custom WeldConstraint
-    for _, child in ipairs(character:GetChildren()) do
-        if child:IsA("BasePart") and matchItemName(child.Name) then
-            child.Parent = player:FindFirstChild("Backpack") or workspace
-        end
+local function WeldItemToHand(item)
+    local character = player.Character
+    if not character then
+        warn("[AutoHold] Character not found")
+        return
     end
-end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then
+        warn("[AutoHold] Humanoid not found")
+        return
+    end
 
-local function WeldItemToHand(item, character)
     local rightHand = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
     if rightHand and item:IsA("BasePart") then
         item.Parent = character
@@ -66,70 +59,100 @@ local function WeldItemToHand(item, character)
         weld.Part1 = item
         weld.Parent = rightHand
         item.CFrame = rightHand.CFrame * CFrame.new(0, -1, 0)
+        print("[AutoHold] Item welded to hand:", item.Name)
     end
 end
 
-local function EquipCycle()
-    while isAutoEquipEnabled do
-        local character = player.Character
-        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-        local backpack = player:FindFirstChild("Backpack")
+local function KeepEquipping()
+    local character = player.Character
+    if not character then return end
 
-        if character and humanoid and humanoid.Health > 0 and backpack then
-            -- Cari item di backpack
-            local foundItem = nil
-            for _, item in ipairs(backpack:GetChildren()) do
-                if matchItemName(item.Name) then
-                    foundItem = item
-                    break
-                end
-            end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return end
 
-            if foundItem then
-                -- 1. Equip Item
-                if foundItem:IsA("Tool") then
-                    humanoid:EquipTool(foundItem)
-                elseif foundItem:IsA("BasePart") then
-                    WeldItemToHand(foundItem, character)
-                else
-                    local tool = foundItem:FindFirstChildWhichIsA("Tool")
-                    if tool then humanoid:EquipTool(tool) end
-                end
+    -- Cek apakah sudah pegang tool
+    local toolInCharacter = character:FindFirstChildWhichIsA("Tool")
+    if toolInCharacter then
+        return -- Sudah pegang, skip
+    end
 
-                -- 2. Tahan item selama HOLD_DURATION
-                task.wait(HOLD_DURATION)
+    -- Tunggu backpack selesai dimuat
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then
+        warn("[AutoHold] Backpack not found")
+        return
+    end
 
-                -- 3. Lepas item sementara agar SC Auto Sell bisa bekerja
-                UnequipCurrentTool(humanoid, character)
+    -- Cari item di backpack
+    local foundItem = nil
+    for _, item in ipairs(backpack:GetChildren()) do
+        if matchItemName(item.Name) then
+            foundItem = item
+            print("[AutoHold] Found matching item:", item.Name, "| Type:", item.ClassName)
+            break
+        end
+    end
 
-                -- 4. Jeda sebentar sebelum re-equip berikutnya
-                task.wait(RELEASE_DURATION)
-            else
-                task.wait(0.5) -- Jika item tidak ditemukan, tunggu sebentar sebelum scan ulang
-            end
+    if foundItem then
+        if foundItem:IsA("Tool") then
+            humanoid:EquipTool(foundItem)
+            print("[AutoHold] Tool equipped:", foundItem.Name)
+        elseif foundItem:IsA("BasePart") then
+            WeldItemToHand(foundItem)
         else
-            task.wait(0.5)
+            -- Handle: Item mungkin adalah "Tool" versi lama
+            warn("[AutoHold] Item is:", foundItem.ClassName, "- attempting direct parent move")
+            if foundItem:IsA("Instance") then
+                local tool = foundItem:FindFirstChildWhichIsA("Tool")
+                if tool then
+                    humanoid:EquipTool(tool)
+                end
+            end
+        end
+    else
+        -- DEBUG: Tampilkan semua item di backpack
+        local items = {}
+        for _, item in ipairs(backpack:GetChildren()) do
+            table.insert(items, item.Name)
+        end
+        if #items > 0 then
+            print("[AutoHold] No match. Backpack items:", table.concat(items, ", "))
+        else
+            print("[AutoHold] Backpack is empty")
         end
     end
 end
 
 local function StartAutoEquip()
-    if not equipThread then
+    if not equipConnection then
+        print("[AutoHold] Auto equip started")
         isAutoEquipEnabled = true
-        equipThread = task.spawn(EquipCycle)
+        equipConnection = RunService.Heartbeat:Connect(KeepEquipping)
     end
 end
 
 local function StopAutoEquip()
     isAutoEquipEnabled = false
-    if equipThread then
-        equipThread = nil
+    if equipConnection then
+        equipConnection:Disconnect()
+        equipConnection = nil
+        print("[AutoHold] Auto equip stopped")
     end
     
-    -- Unequip langsung saat diklik OFF
+    -- Lepas semua item saat dimatikan
     if player.Character then
-        local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-        UnequipCurrentTool(humanoid, player.Character)
+        local character = player.Character
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid:UnequipTools()
+        end
+        
+        -- Hapus weld constraints
+        for _, child in ipairs(character:GetChildren()) do
+            if child:IsA("BasePart") and matchItemName(child.Name) then
+                child.Parent = player:FindFirstChild("Backpack") or workspace
+            end
+        end
     end
 end
 
