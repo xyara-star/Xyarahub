@@ -13,27 +13,27 @@ if not playerGui then
     return
 end
 
--- DAFTAR NAMA EGG LENGKAP (Termasuk Uncommon Egg)
+-- DAFTAR NAMA EGG LENGKAP SESUAI GAMBAR TERBARU
 local EGG_LIST = {
-    "Rare Egg",
-    "Bird Egg",
-    "Common Summer Egg",
-    "Golden Egg",
-    "Enchanted Egg",
-    "Common Egg",
-    "Coastal Egg",
-    "Fall Egg",
-    "Legendary Egg",
-    "Moon Egg",
-    "Mythical Egg",
-    "Bug Egg",
-    "Gem Egg",
-    "Jungle Egg",
     "Spooky Egg",
     "Sprout Egg",
+    "Rare Summer Egg",
     "Anti Bee Egg",
     "Safari Egg",
     "Bee Egg",
+    "Enchanted Egg",
+    "Fall Egg",
+    "Common Summer Egg",
+    "Golden Egg",
+    "Common Egg",
+    "Coastal Egg",
+    "Moon Egg",
+    "Bug Egg",
+    "Bird Egg",
+    "Legendary Egg",
+    "Mythical Egg",
+    "Jungle Egg",
+    "Gem Egg",
     "Uncommon Egg"
 }
 
