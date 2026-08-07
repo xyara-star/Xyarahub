@@ -1,83 +1,61 @@
 -- LocalScript (StarterPlayerScripts)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- ==========================================
--- VARIABLE
--- ==========================================
-local EGG_LIST = {"Common Egg", "Rare Egg", "Golden Egg"} -- Default fallback
+-- DAFTAR NAMA EGG SESUAI TAMPILAN LAYAR
+local EGG_LIST = {
+    "Rare Egg",
+    "Bird Egg",
+    "Common Summer Egg",
+    "Golden Egg",
+    "Enchanted Egg",
+    "Common Egg",
+    "Coastal Egg",
+    "Fall Egg",
+    "Legendary Egg",
+    "Moon Egg",
+    "Mythical Egg",
+    "Bug Egg",
+    "Gem Egg",
+    "Jungle Egg"
+    "Uncommnon Egg"
+}
+
+-- VARIABLE CONTROL
 local selectedEggIndex = 1
 local isAutoEquipEnabled = false
 local equipConnection = nil
+local isDragging = false
+local dragInput = nil
+local dragStart = nil
+local startPos = nil
 
 -- ==========================================
--- FUNGSI SCAN EGG SEDERHANA
--- ==========================================
-local function ScanForEggs()
-    local found = {}
-    local backpack = player:FindFirstChild("Backpack")
-    local character = player.Character
-    
-    -- Scan backpack
-    if backpack then
-        for _, item in pairs(backpack:GetChildren()) do
-            local name = item.Name
-            if string.lower(name):find("egg") then
-                found[name] = true
-            end
-        end
-    end
-    
-    -- Scan character
-    if character then
-        for _, item in pairs(character:GetChildren()) do
-            local name = item.Name
-            if string.lower(name):find("egg") then
-                found[name] = true
-            end
-        end
-    end
-    
-    -- Convert ke list
-    local result = {}
-    for name, _ in pairs(found) do
-        table.insert(result, name)
-    end
-    table.sort(result)
-    
-    if #result > 0 then
-        EGG_LIST = result
-        if selectedEggIndex > #EGG_LIST then
-            selectedEggIndex = 1
-        end
-        return true
-    end
-    return false
-end
-
--- ==========================================
--- MATCHING
+-- HELPER: Case-insensitive string matching
 -- ==========================================
 local function matchItemName(itemName)
-    if #EGG_LIST == 0 then
-        ScanForEggs()
-    end
-    local target = EGG_LIST[selectedEggIndex]
-    if not target then return false end
-    return string.lower(itemName):find(string.lower(target)) ~= nil
+    local targetEgg = EGG_LIST[selectedEggIndex]
+    if not targetEgg then return false end
+    return string.lower(itemName):find(string.lower(targetEgg)) ~= nil
 end
 
 -- ==========================================
--- AUTO HOLD
+-- FUNCTION AUTO EQUIP / WELD
 -- ==========================================
 local function WeldItemToHand(item)
     local character = player.Character
-    if not character then return end
-    
+    if not character then
+        warn("[AutoHold] Character not found")
+        return
+    end
     local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
+    if not humanoid then
+        warn("[AutoHold] Humanoid not found")
+        return
+    end
 
     local rightHand = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
     if rightHand and item:IsA("BasePart") then
@@ -87,6 +65,7 @@ local function WeldItemToHand(item)
         weld.Part1 = item
         weld.Parent = rightHand
         item.CFrame = rightHand.CFrame * CFrame.new(0, -1, 0)
+        print("[AutoHold] Item welded to hand:", item.Name)
     end
 end
 
@@ -98,18 +77,20 @@ local function KeepEquipping()
     if not humanoid or humanoid.Health <= 0 then return end
 
     -- Cek apakah sudah pegang tool
-    for _, child in pairs(character:GetChildren()) do
-        if child:IsA("Tool") then
-            return -- Sudah pegang, skip
-        end
+    local toolInCharacter = character:FindFirstChildWhichIsA("Tool")
+    if toolInCharacter then
+        return
     end
 
+    -- Tunggu backpack selesai dimuat
     local backpack = player:FindFirstChild("Backpack")
-    if not backpack then return end
+    if not backpack then
+        return
+    end
 
     -- Cari item di backpack
     local foundItem = nil
-    for _, item in pairs(backpack:GetChildren()) do
+    for _, item in ipairs(backpack:GetChildren()) do
         if matchItemName(item.Name) then
             foundItem = item
             break
@@ -121,18 +102,21 @@ local function KeepEquipping()
             humanoid:EquipTool(foundItem)
         elseif foundItem:IsA("BasePart") then
             WeldItemToHand(foundItem)
+        else
+            if foundItem:IsA("Instance") then
+                local tool = foundItem:FindFirstChildWhichIsA("Tool")
+                if tool then
+                    humanoid:EquipTool(tool)
+                end
+            end
         end
     end
 end
 
--- ==========================================
--- START/STOP
--- ==========================================
 local function StartAutoEquip()
     if not equipConnection then
         isAutoEquipEnabled = true
         equipConnection = RunService.Heartbeat:Connect(KeepEquipping)
-        print("[AutoHold] Started")
     end
 end
 
@@ -141,117 +125,332 @@ local function StopAutoEquip()
     if equipConnection then
         equipConnection:Disconnect()
         equipConnection = nil
-        print("[AutoHold] Stopped")
     end
     
     if player.Character then
-        local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+        local character = player.Character
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
         if humanoid then
             humanoid:UnequipTools()
+        end
+        
+        for _, child in ipairs(character:GetChildren()) do
+            if child:IsA("BasePart") and matchItemName(child.Name) then
+                child.Parent = player:FindFirstChild("Backpack") or workspace
+            end
         end
     end
 end
 
 -- ==========================================
--- UI SEDERHANA TAPI BERGUNA
+-- BIKIN UI MODERN & BAGUS
 -- ==========================================
-if playerGui:FindFirstChild("AutoHoldUI") then
-    playerGui.AutoHoldUI:Destroy()
+if playerGui:FindFirstChild("XyaraUI") then
+    playerGui.XyaraUI:Destroy()
 end
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "AutoHoldUI"
+ScreenGui.Name = "XyaraUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = playerGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
+-- MAIN FRAME dengan efek glass
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 200, 0, 140)
-MainFrame.Position = UDim2.new(0.05, 0, 0.4, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+MainFrame.Size = UDim2.new(0, 220, 0, 280)
+MainFrame.Position = UDim2.new(0.05, 0, 0.3, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+MainFrame.BackgroundTransparency = 0.15
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Draggable = true
 MainFrame.Parent = ScreenGui
 
+-- Background blur
+local Blur = Instance.new("BlurEffect")
+Blur.Size = 5
+Blur.Parent = MainFrame
+
+-- Corner + Border
 local Corner = Instance.new("UICorner")
-Corner.CornerRadius = UDim.new(0, 10)
+Corner.CornerRadius = UDim.new(0, 12)
 Corner.Parent = MainFrame
 
-local Stroke = Instance.new("UIStroke")
-Stroke.Thickness = 1
-Stroke.Color = Color3.fromRGB(80, 120, 255)
-Stroke.Transparency = 0.5
-Stroke.Parent = MainFrame
+local Border = Instance.new("UIStroke")
+Border.Thickness = 1.5
+Border.Color = Color3.fromRGB(100, 150, 255)
+Border.Transparency = 0.7
+Border.Parent = MainFrame
 
--- Title
+-- Shadow effect
+local Shadow = Instance.new("Frame")
+Shadow.Name = "Shadow"
+Shadow.Size = UDim2.new(1, 10, 1, 10)
+Shadow.Position = UDim2.new(0, -5, 0, -5)
+Shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+Shadow.BackgroundTransparency = 0.7
+Shadow.BorderSizePixel = 0
+Shadow.ZIndex = 0
+Shadow.Parent = MainFrame
+
+local ShadowCorner = Instance.new("UICorner")
+ShadowCorner.CornerRadius = UDim.new(0, 14)
+ShadowCorner.Parent = Shadow
+
+-- Header dengan gradient
+local Header = Instance.new("Frame")
+Header.Name = "Header"
+Header.Size = UDim2.new(1, 0, 0, 45)
+Header.BackgroundColor3 = Color3.fromRGB(40, 50, 80)
+Header.BackgroundTransparency = 0.3
+Header.BorderSizePixel = 0
+Header.Parent = MainFrame
+
+local HeaderCorner = Instance.new("UICorner")
+HeaderCorner.CornerRadius = UDim.new(0, 12)
+HeaderCorner.Parent = Header
+
+-- Title dengan icon
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 30)
+Title.Name = "Title"
+Title.Size = UDim2.new(1, 0, 1, 0)
 Title.BackgroundTransparency = 1
-Title.Text = "🥚 Auto Hold Egg"
+Title.Text = "✨ Auto Hold Item"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.TextSize = 14
-Title.Font = Enum.Font.SourceSansBold
-Title.Parent = MainFrame
+Title.TextSize = 16
+Title.Font = Enum.Font.GothamBold
+Title.TextXAlignment = Enum.TextXAlignment.Center
+Title.Parent = Header
 
--- Tombol Select Egg
+-- Divider line
+local Divider = Instance.new("Frame")
+Divider.Name = "Divider"
+Divider.Size = UDim2.new(0.9, 0, 0, 1)
+Divider.Position = UDim2.new(0.05, 0, 0.16, 0)
+Divider.BackgroundColor3 = Color3.fromRGB(100, 150, 255)
+Divider.BackgroundTransparency = 0.5
+Divider.BorderSizePixel = 0
+Divider.Parent = MainFrame
+
+-- Label Egg
+local EggLabel = Instance.new("TextLabel")
+EggLabel.Name = "EggLabel"
+EggLabel.Size = UDim2.new(1, 0, 0, 25)
+EggLabel.Position = UDim2.new(0, 0, 0.17, 0)
+EggLabel.BackgroundTransparency = 1
+EggLabel.Text = "🐣 Select Egg Type"
+EggLabel.TextColor3 = Color3.fromRGB(200, 200, 255)
+EggLabel.TextSize = 13
+EggLabel.Font = Enum.Font.GothamMedium
+EggLabel.TextXAlignment = Enum.TextXAlignment.Center
+EggLabel.Parent = MainFrame
+
+-- Tombol Pemilih Egg (dengan desain lebih baik)
 local SelectBtn = Instance.new("TextButton")
-SelectBtn.Size = UDim2.new(0.9, 0, 0, 30)
-SelectBtn.Position = UDim2.new(0.05, 0, 0.25, 0)
-SelectBtn.BackgroundColor3 = Color3.fromRGB(50, 60, 80)
-SelectBtn.Text = "Egg: " .. EGG_LIST[selectedEggIndex]
+SelectBtn.Name = "SelectBtn"
+SelectBtn.Size = UDim2.new(0.85, 0, 0, 35)
+SelectBtn.Position = UDim2.new(0.075, 0, 0.27, 0)
+SelectBtn.BackgroundColor3 = Color3.fromRGB(60, 70, 100)
+SelectBtn.BackgroundTransparency = 0.3
+SelectBtn.Text = "🔹 " .. EGG_LIST[selectedEggIndex]
 SelectBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-SelectBtn.TextSize = 12
-SelectBtn.Font = Enum.Font.SourceSans
+SelectBtn.TextSize = 13
+SelectBtn.Font = Enum.Font.GothamMedium
+SelectBtn.BorderSizePixel = 0
 SelectBtn.Parent = MainFrame
 
 local SelectCorner = Instance.new("UICorner")
-SelectCorner.CornerRadius = UDim.new(0, 6)
+SelectCorner.CornerRadius = UDim.new(0, 8)
 SelectCorner.Parent = SelectBtn
 
-SelectBtn.MouseButton1Click:Connect(function()
-    if #EGG_LIST > 1 then
-        selectedEggIndex = selectedEggIndex + 1
-        if selectedEggIndex > #EGG_LIST then
-            selectedEggIndex = 1
-        end
-        SelectBtn.Text = "Egg: " .. EGG_LIST[selectedEggIndex]
-    else
-        -- Try scan again
-        ScanForEggs()
-        SelectBtn.Text = "Egg: " .. EGG_LIST[selectedEggIndex]
-    end
+local SelectStroke = Instance.new("UIStroke")
+SelectStroke.Thickness = 1
+SelectStroke.Color = Color3.fromRGB(100, 150, 255)
+SelectStroke.Transparency = 0.5
+SelectStroke.Parent = SelectBtn
+
+-- Indicator panah select
+local ArrowIcon = Instance.new("TextLabel")
+ArrowIcon.Name = "ArrowIcon"
+ArrowIcon.Size = UDim2.new(0, 20, 1, 0)
+ArrowIcon.Position = UDim2.new(1, -25, 0, 0)
+ArrowIcon.BackgroundTransparency = 1
+ArrowIcon.Text = "▼"
+ArrowIcon.TextColor3 = Color3.fromRGB(150, 180, 255)
+ArrowIcon.TextSize = 14
+ArrowIcon.Font = Enum.Font.GothamBold
+ArrowIcon.Parent = SelectBtn
+
+-- Hover effect SelectBtn
+SelectBtn.MouseEnter:Connect(function()
+    TweenService:Create(SelectBtn, TweenInfo.new(0.2), {
+        BackgroundTransparency = 0.1,
+        TextColor3 = Color3.fromRGB(255, 255, 255)
+    }):Play()
 end)
 
--- Tombol Toggle
+SelectBtn.MouseLeave:Connect(function()
+    TweenService:Create(SelectBtn, TweenInfo.new(0.2), {
+        BackgroundTransparency = 0.3,
+        TextColor3 = Color3.fromRGB(255, 255, 255)
+    }):Play()
+end)
+
+SelectBtn.MouseButton1Click:Connect(function()
+    selectedEggIndex = selectedEggIndex + 1
+    if selectedEggIndex > #EGG_LIST then
+        selectedEggIndex = 1
+    end
+    SelectBtn.Text = "🔹 " .. EGG_LIST[selectedEggIndex]
+    
+    -- Animasi klik
+    TweenService:Create(SelectBtn, TweenInfo.new(0.1), {
+        BackgroundTransparency = 0.05
+    }):Play()
+    task.wait(0.1)
+    TweenService:Create(SelectBtn, TweenInfo.new(0.2), {
+        BackgroundTransparency = 0.3
+    }):Play()
+end)
+
+-- Label Status
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Name = "StatusLabel"
+StatusLabel.Size = UDim2.new(1, 0, 0, 25)
+StatusLabel.Position = UDim2.new(0, 0, 0.44, 0)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "⚡ Status"
+StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 255)
+StatusLabel.TextSize = 13
+StatusLabel.Font = Enum.Font.GothamMedium
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Center
+StatusLabel.Parent = MainFrame
+
+-- Tombol Toggle dengan efek glow
 local ToggleBtn = Instance.new("TextButton")
-ToggleBtn.Size = UDim2.new(0.9, 0, 0, 35)
-ToggleBtn.Position = UDim2.new(0.05, 0, 0.6, 0)
-ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-ToggleBtn.Text = "STATUS: OFF"
+ToggleBtn.Name = "ToggleBtn"
+ToggleBtn.Size = UDim2.new(0.85, 0, 0, 45)
+ToggleBtn.Position = UDim2.new(0.075, 0, 0.55, 0)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 60)
+ToggleBtn.Text = "● OFF"
 ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-ToggleBtn.TextSize = 14
-ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.TextSize = 15
+ToggleBtn.Font = Enum.Font.GothamBold
+ToggleBtn.BorderSizePixel = 0
 ToggleBtn.Parent = MainFrame
 
 local ToggleCorner = Instance.new("UICorner")
-ToggleCorner.CornerRadius = UDim.new(0, 6)
+ToggleCorner.CornerRadius = UDim.new(0, 10)
 ToggleCorner.Parent = ToggleBtn
 
+-- Glow effect untuk toggle
+local Glow = Instance.new("Frame")
+Glow.Name = "Glow"
+Glow.Size = UDim2.new(1.1, 0, 1.2, 0)
+Glow.Position = UDim2.new(-0.05, 0, -0.1, 0)
+Glow.BackgroundColor3 = Color3.fromRGB(200, 50, 60)
+Glow.BackgroundTransparency = 0.8
+Glow.BorderSizePixel = 0
+Glow.ZIndex = 0
+Glow.Parent = ToggleBtn
+
+local GlowCorner = Instance.new("UICorner")
+GlowCorner.CornerRadius = UDim.new(0, 12)
+GlowCorner.Parent = Glow
+
+-- Hover effect ToggleBtn
+ToggleBtn.MouseEnter:Connect(function()
+    TweenService:Create(ToggleBtn, TweenInfo.new(0.2), {
+        BackgroundTransparency = 0.1
+    }):Play()
+end)
+
+ToggleBtn.MouseLeave:Connect(function()
+    TweenService:Create(ToggleBtn, TweenInfo.new(0.2), {
+        BackgroundTransparency = 0
+    }):Play()
+end)
+
+-- Footer info
+local Footer = Instance.new("TextLabel")
+Footer.Name = "Footer"
+Footer.Size = UDim2.new(1, 0, 0, 20)
+Footer.Position = UDim2.new(0, 0, 0.92, 0)
+Footer.BackgroundTransparency = 1
+Footer.Text = "💡 Auto hold when item found"
+Footer.TextColor3 = Color3.fromRGB(150, 150, 200)
+Footer.TextSize = 10
+Footer.Font = Enum.Font.Gotham
+Footer.TextXAlignment = Enum.TextXAlignment.Center
+Footer.TextTransparency = 0.5
+Footer.Parent = MainFrame
+
+-- Toggle function with animation
 ToggleBtn.MouseButton1Click:Connect(function()
     if not isAutoEquipEnabled then
+        -- ON
         ToggleBtn.BackgroundColor3 = Color3.fromRGB(60, 200, 80)
-        ToggleBtn.Text = "STATUS: ON"
+        Glow.BackgroundColor3 = Color3.fromRGB(60, 200, 80)
+        ToggleBtn.Text = "● ON"
+        
+        TweenService:Create(ToggleBtn, TweenInfo.new(0.3), {
+            BackgroundColor3 = Color3.fromRGB(60, 200, 80)
+        }):Play()
+        
+        TweenService:Create(Glow, TweenInfo.new(0.3), {
+            BackgroundColor3 = Color3.fromRGB(60, 200, 80)
+        }):Play()
+        
         StartAutoEquip()
     else
-        ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-        ToggleBtn.Text = "STATUS: OFF"
+        -- OFF
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 60)
+        Glow.BackgroundColor3 = Color3.fromRGB(200, 50, 60)
+        ToggleBtn.Text = "● OFF"
+        
+        TweenService:Create(ToggleBtn, TweenInfo.new(0.3), {
+            BackgroundColor3 = Color3.fromRGB(200, 50, 60)
+        }):Play()
+        
+        TweenService:Create(Glow, TweenInfo.new(0.3), {
+            BackgroundColor3 = Color3.fromRGB(200, 50, 60)
+        }):Play()
+        
         StopAutoEquip()
     end
 end)
 
--- Scan pertama
-task.wait(2)
-ScanForEggs()
-SelectBtn.Text = "Egg: " .. EGG_LIST[selectedEggIndex]
-print("[AutoHold] Found " .. #EGG_LIST .. " eggs")
+-- ==========================================
+-- DRAG SYSTEM (Lebih smooth)
+-- ==========================================
+local function updateInput(input)
+    local delta = input.Position - dragStart
+    MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+
+MainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isDragging = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                isDragging = false
+            end
+        end)
+    end
+end)
+
+MainFrame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if input == dragInput and isDragging then
+        updateInput(input)
+    end
+end)
