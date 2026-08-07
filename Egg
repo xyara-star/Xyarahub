@@ -5,7 +5,7 @@ local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- DAFTAR NAMA EGG SESUAI TAMPILAN LAYAR
+-- DAFTAR NAMA EGG SESUAI TAMPILAN LAYAR (Sudah diperbarui dengan tambahan egg baru)
 local EGG_LIST = {
     "Rare Egg",
     "Bird Egg",
@@ -20,8 +20,13 @@ local EGG_LIST = {
     "Mythical Egg",
     "Bug Egg",
     "Gem Egg",
-    "Jungle Egg"
-    "Uncommnon Egg"
+    "Jungle Egg",
+    "Spooky Egg",
+    "Sprout Egg",
+    "Anti Bee Egg",
+    "Safari Egg",
+    "Bee Egg",
+    "Eggfruit Seed"
 }
 
 -- VARIABLE CONTROL
