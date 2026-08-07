@@ -1,55 +1,257 @@
+-- LocalScript (StarterPlayerScripts)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
 -- ==========================================
--- AUTO DETECT EGG LIST DARI GAME
+-- VARIABLE
 -- ==========================================
-local function GetEggListFromGame()
-    local eggList = {}
+local EGG_LIST = {"Common Egg", "Rare Egg", "Golden Egg"} -- Default fallback
+local selectedEggIndex = 1
+local isAutoEquipEnabled = false
+local equipConnection = nil
+
+-- ==========================================
+-- FUNGSI SCAN EGG SEDERHANA
+-- ==========================================
+local function ScanForEggs()
+    local found = {}
     local backpack = player:FindFirstChild("Backpack")
     local character = player.Character
     
-    -- Cek di Backpack
+    -- Scan backpack
     if backpack then
-        for _, item in ipairs(backpack:GetChildren()) do
+        for _, item in pairs(backpack:GetChildren()) do
             local name = item.Name
-            if string.match(string.lower(name), "egg") then
-                eggList[name] = true
+            if string.lower(name):find("egg") then
+                found[name] = true
             end
         end
     end
     
-    -- Cek di Character
+    -- Scan character
     if character then
-        for _, item in ipairs(character:GetChildren()) do
+        for _, item in pairs(character:GetChildren()) do
             local name = item.Name
-            if string.match(string.lower(name), "egg") and not eggList[name] then
-                eggList[name] = true
+            if string.lower(name):find("egg") then
+                found[name] = true
             end
         end
     end
     
-    -- Konversi ke list
+    -- Convert ke list
     local result = {}
-    for name, _ in pairs(eggList) do
+    for name, _ in pairs(found) do
         table.insert(result, name)
     end
-    return result
+    table.sort(result)
+    
+    if #result > 0 then
+        EGG_LIST = result
+        if selectedEggIndex > #EGG_LIST then
+            selectedEggIndex = 1
+        end
+        return true
+    end
+    return false
 end
 
--- Fungsi untuk update list secara periodik
-local function UpdateEggList()
-    local newList = GetEggListFromGame()
-    if #newList > 0 then
-        EGG_LIST = newList
-        -- Update UI jika perlu
-        if SelectBtn then
-            SelectBtn.Text = "🔹 " .. EGG_LIST[selectedEggIndex]
+-- ==========================================
+-- MATCHING
+-- ==========================================
+local function matchItemName(itemName)
+    if #EGG_LIST == 0 then
+        ScanForEggs()
+    end
+    local target = EGG_LIST[selectedEggIndex]
+    if not target then return false end
+    return string.lower(itemName):find(string.lower(target)) ~= nil
+end
+
+-- ==========================================
+-- AUTO HOLD
+-- ==========================================
+local function WeldItemToHand(item)
+    local character = player.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
+    local rightHand = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
+    if rightHand and item:IsA("BasePart") then
+        item.Parent = character
+        local weld = Instance.new("WeldConstraint")
+        weld.Part0 = rightHand
+        weld.Part1 = item
+        weld.Parent = rightHand
+        item.CFrame = rightHand.CFrame * CFrame.new(0, -1, 0)
+    end
+end
+
+local function KeepEquipping()
+    local character = player.Character
+    if not character then return end
+
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return end
+
+    -- Cek apakah sudah pegang tool
+    for _, child in pairs(character:GetChildren()) do
+        if child:IsA("Tool") then
+            return -- Sudah pegang, skip
+        end
+    end
+
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return end
+
+    -- Cari item di backpack
+    local foundItem = nil
+    for _, item in pairs(backpack:GetChildren()) do
+        if matchItemName(item.Name) then
+            foundItem = item
+            break
+        end
+    end
+
+    if foundItem then
+        if foundItem:IsA("Tool") then
+            humanoid:EquipTool(foundItem)
+        elseif foundItem:IsA("BasePart") then
+            WeldItemToHand(foundItem)
         end
     end
 end
 
--- Jalankan update setiap 5 detik
-task.spawn(function()
-    while true do
-        UpdateEggList()
-        task.wait(5)
+-- ==========================================
+-- START/STOP
+-- ==========================================
+local function StartAutoEquip()
+    if not equipConnection then
+        isAutoEquipEnabled = true
+        equipConnection = RunService.Heartbeat:Connect(KeepEquipping)
+        print("[AutoHold] Started")
+    end
+end
+
+local function StopAutoEquip()
+    isAutoEquipEnabled = false
+    if equipConnection then
+        equipConnection:Disconnect()
+        equipConnection = nil
+        print("[AutoHold] Stopped")
+    end
+    
+    if player.Character then
+        local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid:UnequipTools()
+        end
+    end
+end
+
+-- ==========================================
+-- UI SEDERHANA TAPI BERGUNA
+-- ==========================================
+if playerGui:FindFirstChild("AutoHoldUI") then
+    playerGui.AutoHoldUI:Destroy()
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "AutoHoldUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = playerGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 200, 0, 140)
+MainFrame.Position = UDim2.new(0.05, 0, 0.4, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+local Corner = Instance.new("UICorner")
+Corner.CornerRadius = UDim.new(0, 10)
+Corner.Parent = MainFrame
+
+local Stroke = Instance.new("UIStroke")
+Stroke.Thickness = 1
+Stroke.Color = Color3.fromRGB(80, 120, 255)
+Stroke.Transparency = 0.5
+Stroke.Parent = MainFrame
+
+-- Title
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.BackgroundTransparency = 1
+Title.Text = "🥚 Auto Hold Egg"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 14
+Title.Font = Enum.Font.SourceSansBold
+Title.Parent = MainFrame
+
+-- Tombol Select Egg
+local SelectBtn = Instance.new("TextButton")
+SelectBtn.Size = UDim2.new(0.9, 0, 0, 30)
+SelectBtn.Position = UDim2.new(0.05, 0, 0.25, 0)
+SelectBtn.BackgroundColor3 = Color3.fromRGB(50, 60, 80)
+SelectBtn.Text = "Egg: " .. EGG_LIST[selectedEggIndex]
+SelectBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SelectBtn.TextSize = 12
+SelectBtn.Font = Enum.Font.SourceSans
+SelectBtn.Parent = MainFrame
+
+local SelectCorner = Instance.new("UICorner")
+SelectCorner.CornerRadius = UDim.new(0, 6)
+SelectCorner.Parent = SelectBtn
+
+SelectBtn.MouseButton1Click:Connect(function()
+    if #EGG_LIST > 1 then
+        selectedEggIndex = selectedEggIndex + 1
+        if selectedEggIndex > #EGG_LIST then
+            selectedEggIndex = 1
+        end
+        SelectBtn.Text = "Egg: " .. EGG_LIST[selectedEggIndex]
+    else
+        -- Try scan again
+        ScanForEggs()
+        SelectBtn.Text = "Egg: " .. EGG_LIST[selectedEggIndex]
     end
 end)
+
+-- Tombol Toggle
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(0.9, 0, 0, 35)
+ToggleBtn.Position = UDim2.new(0.05, 0, 0.6, 0)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+ToggleBtn.Text = "STATUS: OFF"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.TextSize = 14
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.Parent = MainFrame
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(0, 6)
+ToggleCorner.Parent = ToggleBtn
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    if not isAutoEquipEnabled then
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(60, 200, 80)
+        ToggleBtn.Text = "STATUS: ON"
+        StartAutoEquip()
+    else
+        ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        ToggleBtn.Text = "STATUS: OFF"
+        StopAutoEquip()
+    end
+end)
+
+-- Scan pertama
+task.wait(2)
+ScanForEggs()
+SelectBtn.Text = "Egg: " .. EGG_LIST[selectedEggIndex]
+print("[AutoHold] Found " .. #EGG_LIST .. " eggs")
