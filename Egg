@@ -2,10 +2,18 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+local UserInputService = game:GetService("UserInputService")
 
--- DAFTAR NAMA EGG SESUAI TAMPILAN LAYAR (Sudah diperbarui dengan tambahan egg baru)
+local player = Players.LocalPlayer
+
+-- Menggunakan WaitForChild dengan aman agar tidak error saat pemuatan awal
+local playerGui = player:WaitForChild("PlayerGui", 10)
+if not playerGui then
+    warn("[AutoHold] PlayerGui tidak ditemukan!")
+    return
+end
+
+-- DAFTAR NAMA EGG LENGKAP
 local EGG_LIST = {
     "Rare Egg",
     "Bird Egg",
@@ -52,15 +60,9 @@ end
 -- ==========================================
 local function WeldItemToHand(item)
     local character = player.Character
-    if not character then
-        warn("[AutoHold] Character not found")
-        return
-    end
+    if not character then return end
     local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then
-        warn("[AutoHold] Humanoid not found")
-        return
-    end
+    if not humanoid then return end
 
     local rightHand = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
     if rightHand and item:IsA("BasePart") then
@@ -70,7 +72,6 @@ local function WeldItemToHand(item)
         weld.Part1 = item
         weld.Parent = rightHand
         item.CFrame = rightHand.CFrame * CFrame.new(0, -1, 0)
-        print("[AutoHold] Item welded to hand:", item.Name)
     end
 end
 
@@ -81,19 +82,12 @@ local function KeepEquipping()
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if not humanoid or humanoid.Health <= 0 then return end
 
-    -- Cek apakah sudah pegang tool
     local toolInCharacter = character:FindFirstChildWhichIsA("Tool")
-    if toolInCharacter then
-        return
-    end
+    if toolInCharacter then return end
 
-    -- Tunggu backpack selesai dimuat
     local backpack = player:FindFirstChild("Backpack")
-    if not backpack then
-        return
-    end
+    if not backpack then return end
 
-    -- Cari item di backpack
     local foundItem = nil
     for _, item in ipairs(backpack:GetChildren()) do
         if matchItemName(item.Name) then
@@ -148,19 +142,21 @@ local function StopAutoEquip()
 end
 
 -- ==========================================
--- BIKIN UI MODERN & BAGUS
+-- BIKIN UI
 -- ==========================================
-if playerGui:FindFirstChild("XyaraUI") then
-    playerGui.XyaraUI:Destroy()
+-- Hapus UI lama jika ada agar tidak menumpuk
+if playerGui:FindFirstChild("XyaraOverlayUI") then
+    playerGui.XyaraOverlayUI:Destroy()
 end
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "XyaraUI"
+ScreenGui.Name = "XyaraOverlayUI"
+ScreenGui.DisplayOrder = 999 -- Memastikan UI tampil di lapisan paling atas
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = playerGui
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- MAIN FRAME dengan efek glass
+-- MAIN FRAME
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 220, 0, 280)
@@ -171,11 +167,6 @@ MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Draggable = true
 MainFrame.Parent = ScreenGui
-
--- Background blur
-local Blur = Instance.new("BlurEffect")
-Blur.Size = 5
-Blur.Parent = MainFrame
 
 -- Corner + Border
 local Corner = Instance.new("UICorner")
@@ -203,7 +194,7 @@ local ShadowCorner = Instance.new("UICorner")
 ShadowCorner.CornerRadius = UDim.new(0, 14)
 ShadowCorner.Parent = Shadow
 
--- Header dengan gradient
+-- Header
 local Header = Instance.new("Frame")
 Header.Name = "Header"
 Header.Size = UDim2.new(1, 0, 0, 45)
@@ -216,7 +207,7 @@ local HeaderCorner = Instance.new("UICorner")
 HeaderCorner.CornerRadius = UDim.new(0, 12)
 HeaderCorner.Parent = Header
 
--- Title dengan icon
+-- Title
 local Title = Instance.new("TextLabel")
 Title.Name = "Title"
 Title.Size = UDim2.new(1, 0, 1, 0)
@@ -251,7 +242,7 @@ EggLabel.Font = Enum.Font.GothamMedium
 EggLabel.TextXAlignment = Enum.TextXAlignment.Center
 EggLabel.Parent = MainFrame
 
--- Tombol Pemilih Egg (dengan desain lebih baik)
+-- Tombol Pemilih Egg
 local SelectBtn = Instance.new("TextButton")
 SelectBtn.Name = "SelectBtn"
 SelectBtn.Size = UDim2.new(0.85, 0, 0, 35)
@@ -287,21 +278,6 @@ ArrowIcon.TextSize = 14
 ArrowIcon.Font = Enum.Font.GothamBold
 ArrowIcon.Parent = SelectBtn
 
--- Hover effect SelectBtn
-SelectBtn.MouseEnter:Connect(function()
-    TweenService:Create(SelectBtn, TweenInfo.new(0.2), {
-        BackgroundTransparency = 0.1,
-        TextColor3 = Color3.fromRGB(255, 255, 255)
-    }):Play()
-end)
-
-SelectBtn.MouseLeave:Connect(function()
-    TweenService:Create(SelectBtn, TweenInfo.new(0.2), {
-        BackgroundTransparency = 0.3,
-        TextColor3 = Color3.fromRGB(255, 255, 255)
-    }):Play()
-end)
-
 SelectBtn.MouseButton1Click:Connect(function()
     selectedEggIndex = selectedEggIndex + 1
     if selectedEggIndex > #EGG_LIST then
@@ -309,14 +285,9 @@ SelectBtn.MouseButton1Click:Connect(function()
     end
     SelectBtn.Text = "🔹 " .. EGG_LIST[selectedEggIndex]
     
-    -- Animasi klik
-    TweenService:Create(SelectBtn, TweenInfo.new(0.1), {
-        BackgroundTransparency = 0.05
-    }):Play()
+    TweenService:Create(SelectBtn, TweenInfo.new(0.1), { BackgroundTransparency = 0.05 }):Play()
     task.wait(0.1)
-    TweenService:Create(SelectBtn, TweenInfo.new(0.2), {
-        BackgroundTransparency = 0.3
-    }):Play()
+    TweenService:Create(SelectBtn, TweenInfo.new(0.2), { BackgroundTransparency = 0.3 }):Play()
 end)
 
 -- Label Status
@@ -332,7 +303,7 @@ StatusLabel.Font = Enum.Font.GothamMedium
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Center
 StatusLabel.Parent = MainFrame
 
--- Tombol Toggle dengan efek glow
+-- Tombol Toggle
 local ToggleBtn = Instance.new("TextButton")
 ToggleBtn.Name = "ToggleBtn"
 ToggleBtn.Size = UDim2.new(0.85, 0, 0, 45)
@@ -364,19 +335,6 @@ local GlowCorner = Instance.new("UICorner")
 GlowCorner.CornerRadius = UDim.new(0, 12)
 GlowCorner.Parent = Glow
 
--- Hover effect ToggleBtn
-ToggleBtn.MouseEnter:Connect(function()
-    TweenService:Create(ToggleBtn, TweenInfo.new(0.2), {
-        BackgroundTransparency = 0.1
-    }):Play()
-end)
-
-ToggleBtn.MouseLeave:Connect(function()
-    TweenService:Create(ToggleBtn, TweenInfo.new(0.2), {
-        BackgroundTransparency = 0
-    }):Play()
-end)
-
 -- Footer info
 local Footer = Instance.new("TextLabel")
 Footer.Name = "Footer"
@@ -391,43 +349,31 @@ Footer.TextXAlignment = Enum.TextXAlignment.Center
 Footer.TextTransparency = 0.5
 Footer.Parent = MainFrame
 
--- Toggle function with animation
+-- Toggle function
 ToggleBtn.MouseButton1Click:Connect(function()
     if not isAutoEquipEnabled then
-        -- ON
         ToggleBtn.BackgroundColor3 = Color3.fromRGB(60, 200, 80)
         Glow.BackgroundColor3 = Color3.fromRGB(60, 200, 80)
         ToggleBtn.Text = "● ON"
         
-        TweenService:Create(ToggleBtn, TweenInfo.new(0.3), {
-            BackgroundColor3 = Color3.fromRGB(60, 200, 80)
-        }):Play()
-        
-        TweenService:Create(Glow, TweenInfo.new(0.3), {
-            BackgroundColor3 = Color3.fromRGB(60, 200, 80)
-        }):Play()
+        TweenService:Create(ToggleBtn, TweenInfo.new(0.3), { BackgroundColor3 = Color3.fromRGB(60, 200, 80) }):Play()
+        TweenService:Create(Glow, TweenInfo.new(0.3), { BackgroundColor3 = Color3.fromRGB(60, 200, 80) }):Play()
         
         StartAutoEquip()
     else
-        -- OFF
         ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 60)
         Glow.BackgroundColor3 = Color3.fromRGB(200, 50, 60)
         ToggleBtn.Text = "● OFF"
         
-        TweenService:Create(ToggleBtn, TweenInfo.new(0.3), {
-            BackgroundColor3 = Color3.fromRGB(200, 50, 60)
-        }):Play()
-        
-        TweenService:Create(Glow, TweenInfo.new(0.3), {
-            BackgroundColor3 = Color3.fromRGB(200, 50, 60)
-        }):Play()
+        TweenService:Create(ToggleBtn, TweenInfo.new(0.3), { BackgroundColor3 = Color3.fromRGB(200, 50, 60) }):Play()
+        TweenService:Create(Glow, TweenInfo.new(0.3), { BackgroundColor3 = Color3.fromRGB(200, 50, 60) }):Play()
         
         StopAutoEquip()
     end
 end)
 
 -- ==========================================
--- DRAG SYSTEM (Lebih smooth)
+-- DRAG SYSTEM
 -- ==========================================
 local function updateInput(input)
     local delta = input.Position - dragStart
@@ -454,7 +400,7 @@ MainFrame.InputChanged:Connect(function(input)
     end
 end)
 
-game:GetService("UserInputService").InputChanged:Connect(function(input)
+UserInputService.InputChanged:Connect(function(input)
     if input == dragInput and isDragging then
         updateInput(input)
     end
