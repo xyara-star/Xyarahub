@@ -1,46 +1,31 @@
---// Xyara Egg Lock v2
+--// Xyara Egg Lock
 --// LocalScript - StarterPlayerScripts
 
 local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 
-local Player = Players.LocalPlayer
-local PlayerGui = Player:WaitForChild("PlayerGui")
-
---==================================================
--- STATE
---==================================================
-
-local Locked = false
-local LockedEggName = nil
-local LoopRunning = false
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 
 --==================================================
--- GET CHARACTER / HUMANOID
+-- VARIABLES
 --==================================================
 
-local function GetCharacter()
-    return Player.Character
-end
-
-local function GetHumanoid()
-    local Character = GetCharacter()
-    if not Character then return nil end
-
-    return Character:FindFirstChildOfClass("Humanoid")
-end
+local isLocked = false
+local lockedItemName = nil
+local equipConnection = nil
 
 --==================================================
--- GET HELD TOOL
+-- FIND CURRENT HELD ITEM
 --==================================================
 
-local function GetHeldEgg()
-    local Character = GetCharacter()
-    if not Character then return nil end
+local function GetHeldItem()
+    local character = player.Character
+    if not character then return nil end
 
-    for _, Item in ipairs(Character:GetChildren()) do
-        if Item:IsA("Tool") then
-            return Item
+    for _, item in ipairs(character:GetChildren()) do
+        if item:IsA("Tool") then
+            return item
         end
     end
 
@@ -48,29 +33,43 @@ local function GetHeldEgg()
 end
 
 --==================================================
--- FIND EGG
+-- MATCH ITEM NAME
 --==================================================
 
-local function FindEgg(Name)
-    if not Name then return nil end
+local function matchItemName(itemName)
+    if not lockedItemName then
+        return false
+    end
 
-    local Character = GetCharacter()
-    local Backpack = Player:FindFirstChild("Backpack")
+    return string.lower(itemName):find(
+        string.lower(lockedItemName),
+        1,
+        true
+    ) ~= nil
+end
 
-    -- Cari di tangan dulu
-    if Character then
-        for _, Item in ipairs(Character:GetChildren()) do
-            if Item:IsA("Tool") and Item.Name == Name then
-                return Item
+--==================================================
+-- FIND LOCKED ITEM
+--==================================================
+
+local function FindLockedItem()
+    local character = player.Character
+    local backpack = player:FindFirstChild("Backpack")
+
+    -- Cek Character
+    if character then
+        for _, item in ipairs(character:GetChildren()) do
+            if item:IsA("Tool") and matchItemName(item.Name) then
+                return item
             end
         end
     end
 
-    -- Cari di backpack
-    if Backpack then
-        for _, Item in ipairs(Backpack:GetChildren()) do
-            if Item:IsA("Tool") and Item.Name == Name then
-                return Item
+    -- Cek Backpack
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") and matchItemName(item.Name) then
+                return item
             end
         end
     end
@@ -79,160 +78,291 @@ local function FindEgg(Name)
 end
 
 --==================================================
--- EQUIP LOCKED EGG
+-- WELD FALLBACK
 --==================================================
 
-local function EquipLockedEgg()
-    if not Locked or not LockedEggName then
+local function WeldItemToHand(item)
+
+    local character = player.Character
+    if not character then return end
+
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
+    local rightHand =
+        character:FindFirstChild("RightHand")
+        or character:FindFirstChild("Right Arm")
+
+    if rightHand and item:IsA("BasePart") then
+
+        item.Parent = character
+
+        local oldWeld = item:FindFirstChild("XyaraEggWeld")
+
+        if oldWeld then
+            oldWeld:Destroy()
+        end
+
+        local weld = Instance.new("WeldConstraint")
+        weld.Name = "XyaraEggWeld"
+        weld.Part0 = rightHand
+        weld.Part1 = item
+        weld.Parent = item
+
+        item.CFrame =
+            rightHand.CFrame * CFrame.new(0, -1, 0)
+    end
+end
+
+--==================================================
+-- KEEP LOCKED ITEM EQUIPPED
+--==================================================
+
+local function KeepLockedItem()
+
+    if not isLocked then
         return
     end
 
-    local Humanoid = GetHumanoid()
-    if not Humanoid or Humanoid.Health <= 0 then
+    if not lockedItemName then
         return
     end
 
-    local Held = GetHeldEgg()
-
-    -- Sudah pegang Egg yang benar
-    if Held and Held.Name == LockedEggName then
+    local character = player.Character
+    if not character then
         return
     end
 
-    local Egg = FindEgg(LockedEggName)
+    local humanoid =
+        character:FindFirstChildOfClass("Humanoid")
 
-    if Egg then
+    if not humanoid or humanoid.Health <= 0 then
+        return
+    end
+
+    -- Item yang sedang dipegang
+    local currentItem = GetHeldItem()
+
+    -- Kalau sudah benar, jangan ngapa-ngapain
+    if currentItem and matchItemName(currentItem.Name) then
+        return
+    end
+
+    -- Cari item yang dikunci
+    local foundItem = FindLockedItem()
+
+    if not foundItem then
+        return
+    end
+
+    -- Kalau sedang pegang item lain,
+    -- lepas dulu supaya target bisa di-equip
+    if currentItem then
+        humanoid:UnequipTools()
+        task.wait()
+    end
+
+    -- Equip Tool
+    if foundItem:IsA("Tool") then
+
         pcall(function()
-            Humanoid:EquipTool(Egg)
+            humanoid:EquipTool(foundItem)
         end)
+
+    elseif foundItem:IsA("BasePart") then
+
+        WeldItemToHand(foundItem)
+
+    else
+
+        -- Fallback kalau item punya Tool di dalamnya
+        local tool =
+            foundItem:FindFirstChildWhichIsA("Tool", true)
+
+        if tool then
+            pcall(function()
+                humanoid:EquipTool(tool)
+            end)
+        end
     end
 end
 
 --==================================================
--- LOCK
+-- START LOCK
 --==================================================
 
-local function LockEgg()
-    local Held = GetHeldEgg()
+local function StartLock()
 
-    if not Held then
-        Status.Text = "⚠️ Pegang Egg dulu!"
+    if not lockedItemName then
         return
     end
 
-    LockedEggName = Held.Name
-    Locked = true
+    isLocked = true
 
-    LockButton.Text = "🔓  UNLOCK"
-    LockButton.BackgroundColor3 =
-        Color3.fromRGB(45, 190, 80)
-
-    Status.Text = "🔒 LOCKED: " .. LockedEggName
-
-    if not LoopRunning then
-        LoopRunning = true
-
-        task.spawn(function()
-            while Locked do
-                EquipLockedEgg()
-                task.wait(0.15)
-            end
-
-            LoopRunning = false
-        end)
+    if equipConnection then
+        equipConnection:Disconnect()
     end
+
+    equipConnection =
+        RunService.Heartbeat:Connect(KeepLockedItem)
+
+    print("[Xyara] LOCKED:", lockedItemName)
 end
 
 --==================================================
--- UNLOCK
+-- STOP LOCK
 --==================================================
 
-local function UnlockEgg()
-    Locked = false
-    LockedEggName = nil
+local function StopLock()
 
-    LockButton.Text = "🔒  LOCK"
-    LockButton.BackgroundColor3 =
-        Color3.fromRGB(210, 55, 65)
+    isLocked = false
+    lockedItemName = nil
 
-    Status.Text = "🔓 UNLOCKED"
+    if equipConnection then
+        equipConnection:Disconnect()
+        equipConnection = nil
+    end
+
+    print("[Xyara] UNLOCKED")
 end
 
 --==================================================
 -- GUI
 --==================================================
 
-if PlayerGui:FindFirstChild("XyaraEggLock") then
-    PlayerGui.XyaraEggLock:Destroy()
+if playerGui:FindFirstChild("XyaraEggLock") then
+    playerGui.XyaraEggLock:Destroy()
 end
 
-local GUI = Instance.new("ScreenGui")
-GUI.Name = "XyaraEggLock"
-GUI.ResetOnSpawn = false
-GUI.DisplayOrder = 999
-GUI.Parent = PlayerGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "XyaraEggLock"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.DisplayOrder = 999
+ScreenGui.Parent = playerGui
 
--- MAIN
-local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 215, 0, 135)
-Main.Position = UDim2.new(0, 35, 0.65, 0)
-Main.BackgroundColor3 = Color3.fromRGB(25, 35, 65)
-Main.BorderSizePixel = 0
-Main.Active = true
-Main.Draggable = true
-Main.Parent = GUI
+-- MAIN FRAME
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 220, 0, 125)
+MainFrame.Position = UDim2.new(0.05, 0, 0.65, 0)
+
+MainFrame.BackgroundColor3 =
+    Color3.fromRGB(25, 35, 60)
+
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
 
 local Corner = Instance.new("UICorner")
 Corner.CornerRadius = UDim.new(0, 10)
-Corner.Parent = Main
+Corner.Parent = MainFrame
+
+-- BORDER
+
+local Stroke = Instance.new("UIStroke")
+Stroke.Thickness = 1
+Stroke.Color = Color3.fromRGB(80, 130, 220)
+Stroke.Transparency = 0.3
+Stroke.Parent = MainFrame
 
 -- TITLE
+
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 32)
+Title.Size = UDim2.new(1, 0, 0, 30)
 Title.BackgroundTransparency = 1
-Title.Text = "🥚  Egg Lock"
-Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.Text = "🥚 Egg Lock"
+Title.TextColor3 =
+    Color3.fromRGB(255, 255, 255)
 Title.TextSize = 15
 Title.Font = Enum.Font.GothamBold
-Title.Parent = Main
+Title.Parent = MainFrame
 
 -- STATUS
-Status = Instance.new("TextLabel")
-Status.Size = UDim2.new(0.9, 0, 0, 28)
+
+local Status = Instance.new("TextLabel")
+Status.Size = UDim2.new(0.9, 0, 0, 30)
 Status.Position = UDim2.new(0.05, 0, 0.27, 0)
 Status.BackgroundTransparency = 1
 Status.Text = "🔓 UNLOCKED"
-Status.TextColor3 = Color3.fromRGB(220, 225, 255)
+Status.TextColor3 =
+    Color3.fromRGB(210, 215, 240)
 Status.TextSize = 11
 Status.Font = Enum.Font.GothamMedium
 Status.TextWrapped = true
-Status.Parent = Main
+Status.Parent = MainFrame
 
 -- BUTTON
-LockButton = Instance.new("TextButton")
-LockButton.Size = UDim2.new(0.85, 0, 0, 42)
-LockButton.Position = UDim2.new(0.075, 0, 0.57, 0)
-LockButton.BackgroundColor3 = Color3.fromRGB(210, 55, 65)
+
+local LockButton = Instance.new("TextButton")
+LockButton.Size = UDim2.new(0.85, 0, 0, 40)
+LockButton.Position = UDim2.new(0.075, 0, 0.62, 0)
+
+LockButton.BackgroundColor3 =
+    Color3.fromRGB(200, 55, 65)
+
 LockButton.Text = "🔒  LOCK"
-LockButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+LockButton.TextColor3 =
+    Color3.fromRGB(255, 255, 255)
+
 LockButton.TextSize = 14
 LockButton.Font = Enum.Font.GothamBold
 LockButton.BorderSizePixel = 0
-LockButton.Parent = Main
+LockButton.Parent = MainFrame
 
 local ButtonCorner = Instance.new("UICorner")
 ButtonCorner.CornerRadius = UDim.new(0, 8)
 ButtonCorner.Parent = LockButton
 
 --==================================================
--- BUTTON EVENT
+-- LOCK BUTTON
 --==================================================
 
 LockButton.MouseButton1Click:Connect(function()
-    if Locked then
-        UnlockEgg()
+
+    -- LOCK
+    if not isLocked then
+
+        local heldItem = GetHeldItem()
+
+        if not heldItem then
+
+            Status.Text = "⚠️ Pegang Egg dulu!"
+
+            task.delay(1.5, function()
+                if not isLocked then
+                    Status.Text = "🔓 UNLOCKED"
+                end
+            end)
+
+            return
+        end
+
+        -- Simpan nama item yang sedang dipegang
+        lockedItemName = heldItem.Name
+
+        StartLock()
+
+        LockButton.Text = "🔓  UNLOCK"
+
+        LockButton.BackgroundColor3 =
+            Color3.fromRGB(45, 185, 75)
+
+        Status.Text =
+            "🔒 LOCKED: " .. lockedItemName
+
+    -- UNLOCK
     else
-        LockEgg()
+
+        StopLock()
+
+        LockButton.Text = "🔒  LOCK"
+
+        LockButton.BackgroundColor3 =
+            Color3.fromRGB(200, 55, 65)
+
+        Status.Text = "🔓 UNLOCKED"
     end
 end)
 
@@ -240,56 +370,38 @@ end)
 -- RESPAWN
 --==================================================
 
-Player.CharacterAdded:Connect(function()
-    if Locked then
-        task.wait(0.7)
-        EquipLockedEgg()
+player.CharacterAdded:Connect(function(character)
+
+    if not isLocked then
+        return
     end
+
+    task.wait(1)
+
+    KeepLockedItem()
 end)
 
 --==================================================
--- BACKPACK MONITOR
+-- BACKPACK UPDATE
 --==================================================
 
-local Backpack = Player:WaitForChild("Backpack")
+local backpack = player:WaitForChild("Backpack")
 
-Backpack.ChildAdded:Connect(function(Item)
-    if Locked and Item:IsA("Tool") then
+backpack.ChildAdded:Connect(function(item)
+
+    if not isLocked then
+        return
+    end
+
+    if item:IsA("Tool") and matchItemName(item.Name) then
+
         task.wait(0.1)
 
-        if Item.Name == LockedEggName then
-            EquipLockedEgg()
-        end
+        KeepLockedItem()
     end
 end)
 
---==================================================
--- CHARACTER MONITOR
---==================================================
-
-local function MonitorCharacter(Character)
-
-    Character.ChildAdded:Connect(function(Item)
-        if not Locked then
-            return
-        end
-
-        if Item:IsA("Tool") then
-            task.wait(0.05)
-
-            if Item.Name ~= LockedEggName then
-                EquipLockedEgg()
-            end
-        end
-    end)
-end
-
-if Player.Character then
-    MonitorCharacter(Player.Character)
-end
-
-Player.CharacterAdded:Connect(function(Character)
-    MonitorCharacter(Character)
-end)
-
+print("================================")
 print("[Xyara Egg Lock] Loaded")
+print("[Xyara Egg Lock] Pegang Egg > LOCK")
+print("================================")
