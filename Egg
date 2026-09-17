@@ -1,5 +1,4 @@
---// Xyara Egg Lock
---// LocalScript - StarterPlayerScripts
+-- LocalScript (StarterPlayerScripts)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -7,79 +6,37 @@ local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
---==================================================
--- VARIABLES
---==================================================
+-- ==========================================
+-- DAFTAR EGG
+-- ==========================================
 
-local isLocked = false
-local lockedItemName = nil
+local EGG_LIST = {
+    "Rare Egg",
+    "Common Egg",
+    "Coastal Egg",
+    "Jungle Egg",
+    "Gem Egg",
+    "Bug Egg",
+}
+
+-- Egg yang sedang dipilih
+local selectedEgg = "Rare Egg"
+
+-- CONTROL
+local isAutoEquipEnabled = false
 local equipConnection = nil
 
---==================================================
--- FIND CURRENT HELD ITEM
---==================================================
-
-local function GetHeldItem()
-    local character = player.Character
-    if not character then return nil end
-
-    for _, item in ipairs(character:GetChildren()) do
-        if item:IsA("Tool") then
-            return item
-        end
-    end
-
-    return nil
-end
-
---==================================================
--- MATCH ITEM NAME
---==================================================
+-- ==========================================
+-- MATCH NAMA
+-- ==========================================
 
 local function matchItemName(itemName)
-    if not lockedItemName then
-        return false
-    end
-
-    return string.lower(itemName):find(
-        string.lower(lockedItemName),
-        1,
-        true
-    ) ~= nil
+    return string.lower(itemName) == string.lower(selectedEgg)
 end
 
---==================================================
--- FIND LOCKED ITEM
---==================================================
-
-local function FindLockedItem()
-    local character = player.Character
-    local backpack = player:FindFirstChild("Backpack")
-
-    -- Cek Character
-    if character then
-        for _, item in ipairs(character:GetChildren()) do
-            if item:IsA("Tool") and matchItemName(item.Name) then
-                return item
-            end
-        end
-    end
-
-    -- Cek Backpack
-    if backpack then
-        for _, item in ipairs(backpack:GetChildren()) do
-            if item:IsA("Tool") and matchItemName(item.Name) then
-                return item
-            end
-        end
-    end
-
-    return nil
-end
-
---==================================================
--- WELD FALLBACK
---==================================================
+-- ==========================================
+-- WELD ITEM KE TANGAN
+-- ==========================================
 
 local function WeldItemToHand(item)
 
@@ -95,43 +52,37 @@ local function WeldItemToHand(item)
 
     if rightHand and item:IsA("BasePart") then
 
-        item.Parent = character
-
-        local oldWeld = item:FindFirstChild("XyaraEggWeld")
-
-        if oldWeld then
-            oldWeld:Destroy()
+        -- Hapus weld lama
+        for _, obj in ipairs(rightHand:GetChildren()) do
+            if obj:IsA("WeldConstraint")
+            and obj.Name == "AutoHoldWeld" then
+                obj:Destroy()
+            end
         end
 
+        item.Parent = character
+
         local weld = Instance.new("WeldConstraint")
-        weld.Name = "XyaraEggWeld"
+        weld.Name = "AutoHoldWeld"
         weld.Part0 = rightHand
         weld.Part1 = item
-        weld.Parent = item
+        weld.Parent = rightHand
 
         item.CFrame =
             rightHand.CFrame * CFrame.new(0, -1, 0)
     end
 end
 
---==================================================
--- KEEP LOCKED ITEM EQUIPPED
---==================================================
+-- ==========================================
+-- KEEP EQUIP
+-- ==========================================
 
-local function KeepLockedItem()
+local function KeepEquipping()
 
-    if not isLocked then
-        return
-    end
-
-    if not lockedItemName then
-        return
-    end
+    if not isAutoEquipEnabled then return end
 
     local character = player.Character
-    if not character then
-        return
-    end
+    if not character then return end
 
     local humanoid =
         character:FindFirstChildOfClass("Humanoid")
@@ -140,268 +91,230 @@ local function KeepLockedItem()
         return
     end
 
-    -- Item yang sedang dipegang
-    local currentItem = GetHeldItem()
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return end
 
-    -- Kalau sudah benar, jangan ngapa-ngapain
-    if currentItem and matchItemName(currentItem.Name) then
+    -- Kalau egg yang dipilih sudah di tangan
+    local currentTool = character:FindFirstChildWhichIsA("Tool")
+
+    if currentTool and matchItemName(currentTool.Name) then
         return
     end
 
-    -- Cari item yang dikunci
-    local foundItem = FindLockedItem()
+    -- Cari egg pilihan
+    local foundItem = nil
 
-    if not foundItem then
-        return
-    end
+    for _, item in ipairs(backpack:GetChildren()) do
 
-    -- Kalau sedang pegang item lain,
-    -- lepas dulu supaya target bisa di-equip
-    if currentItem then
-        humanoid:UnequipTools()
-        task.wait()
-    end
-
-    -- Equip Tool
-    if foundItem:IsA("Tool") then
-
-        pcall(function()
-            humanoid:EquipTool(foundItem)
-        end)
-
-    elseif foundItem:IsA("BasePart") then
-
-        WeldItemToHand(foundItem)
-
-    else
-
-        -- Fallback kalau item punya Tool di dalamnya
-        local tool =
-            foundItem:FindFirstChildWhichIsA("Tool", true)
-
-        if tool then
-            pcall(function()
-                humanoid:EquipTool(tool)
-            end)
+        if matchItemName(item.Name) then
+            foundItem = item
+            break
         end
+
+    end
+
+    if foundItem then
+
+        if foundItem:IsA("Tool") then
+
+            humanoid:EquipTool(foundItem)
+
+        elseif foundItem:IsA("BasePart") then
+
+            WeldItemToHand(foundItem)
+
+        end
+
     end
 end
 
---==================================================
--- START LOCK
---==================================================
+-- ==========================================
+-- START / STOP
+-- ==========================================
 
-local function StartLock()
+local function StartAutoEquip()
 
-    if not lockedItemName then
-        return
-    end
-
-    isLocked = true
-
-    if equipConnection then
-        equipConnection:Disconnect()
-    end
+    if equipConnection then return end
 
     equipConnection =
-        RunService.Heartbeat:Connect(KeepLockedItem)
-
-    print("[Xyara] LOCKED:", lockedItemName)
+        RunService.Heartbeat:Connect(KeepEquipping)
 end
 
---==================================================
--- STOP LOCK
---==================================================
-
-local function StopLock()
-
-    isLocked = false
-    lockedItemName = nil
+local function StopAutoEquip()
 
     if equipConnection then
         equipConnection:Disconnect()
         equipConnection = nil
     end
-
-    print("[Xyara] UNLOCKED")
 end
 
---==================================================
--- GUI
---==================================================
+-- ==========================================
+-- UI
+-- ==========================================
 
-if playerGui:FindFirstChild("XyaraEggLock") then
-    playerGui.XyaraEggLock:Destroy()
+if playerGui:FindFirstChild("XyaraMinUI") then
+    playerGui.XyaraMinUI:Destroy()
 end
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "XyaraEggLock"
+ScreenGui.Name = "XyaraMinUI"
 ScreenGui.ResetOnSpawn = false
-ScreenGui.DisplayOrder = 999
 ScreenGui.Parent = playerGui
 
--- MAIN FRAME
-
+-- MAIN
 local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 220, 0, 125)
-MainFrame.Position = UDim2.new(0.05, 0, 0.65, 0)
-
-MainFrame.BackgroundColor3 =
-    Color3.fromRGB(25, 35, 60)
-
+MainFrame.Size = UDim2.new(0, 190, 0, 300)
+MainFrame.Position = UDim2.new(0.05, 0, 0.3, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Draggable = true
 MainFrame.Parent = ScreenGui
 
 local Corner = Instance.new("UICorner")
-Corner.CornerRadius = UDim.new(0, 10)
+Corner.CornerRadius = UDim.new(0, 8)
 Corner.Parent = MainFrame
 
--- BORDER
-
-local Stroke = Instance.new("UIStroke")
-Stroke.Thickness = 1
-Stroke.Color = Color3.fromRGB(80, 130, 220)
-Stroke.Transparency = 0.3
-Stroke.Parent = MainFrame
-
 -- TITLE
-
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 30)
+Title.Size = UDim2.new(1, 0, 0, 35)
 Title.BackgroundTransparency = 1
-Title.Text = "🥚 Egg Lock"
-Title.TextColor3 =
-    Color3.fromRGB(255, 255, 255)
+Title.Text = "🥚 SELECT EGG"
+Title.TextColor3 = Color3.fromRGB(255,255,255)
 Title.TextSize = 15
-Title.Font = Enum.Font.GothamBold
+Title.Font = Enum.Font.SourceSansBold
 Title.Parent = MainFrame
 
--- STATUS
+-- SELECTED LABEL
+local SelectedLabel = Instance.new("TextLabel")
+SelectedLabel.Size = UDim2.new(1, -20, 0, 25)
+SelectedLabel.Position = UDim2.new(0, 10, 0, 35)
+SelectedLabel.BackgroundTransparency = 1
+SelectedLabel.Text = "Selected: " .. selectedEgg
+SelectedLabel.TextColor3 = Color3.fromRGB(255,255,255)
+SelectedLabel.TextSize = 13
+SelectedLabel.Font = Enum.Font.SourceSans
+SelectedLabel.Parent = MainFrame
 
-local Status = Instance.new("TextLabel")
-Status.Size = UDim2.new(0.9, 0, 0, 30)
-Status.Position = UDim2.new(0.05, 0, 0.27, 0)
-Status.BackgroundTransparency = 1
-Status.Text = "🔓 UNLOCKED"
-Status.TextColor3 =
-    Color3.fromRGB(210, 215, 240)
-Status.TextSize = 11
-Status.Font = Enum.Font.GothamMedium
-Status.TextWrapped = true
-Status.Parent = MainFrame
+-- SCROLL LIST
+local ScrollingFrame = Instance.new("ScrollingFrame")
+ScrollingFrame.Size = UDim2.new(1, -20, 0, 170)
+ScrollingFrame.Position = UDim2.new(0, 10, 0, 65)
+ScrollingFrame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+ScrollingFrame.BorderSizePixel = 0
+ScrollingFrame.ScrollBarThickness = 5
+ScrollingFrame.CanvasSize = UDim2.new(0,0,0,0)
+ScrollingFrame.Parent = MainFrame
 
--- BUTTON
+local ScrollCorner = Instance.new("UICorner")
+ScrollCorner.CornerRadius = UDim.new(0,6)
+ScrollCorner.Parent = ScrollingFrame
 
-local LockButton = Instance.new("TextButton")
-LockButton.Size = UDim2.new(0.85, 0, 0, 40)
-LockButton.Position = UDim2.new(0.075, 0, 0.62, 0)
+local Layout = Instance.new("UIListLayout")
+Layout.Padding = UDim.new(0,5)
+Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+Layout.Parent = ScrollingFrame
 
-LockButton.BackgroundColor3 =
-    Color3.fromRGB(200, 55, 65)
+-- ==========================================
+-- BUAT BUTTON EGG
+-- ==========================================
 
-LockButton.Text = "🔒  LOCK"
-LockButton.TextColor3 =
-    Color3.fromRGB(255, 255, 255)
+for _, eggName in ipairs(EGG_LIST) do
 
-LockButton.TextSize = 14
-LockButton.Font = Enum.Font.GothamBold
-LockButton.BorderSizePixel = 0
-LockButton.Parent = MainFrame
+    local EggButton = Instance.new("TextButton")
 
-local ButtonCorner = Instance.new("UICorner")
-ButtonCorner.CornerRadius = UDim.new(0, 8)
-ButtonCorner.Parent = LockButton
+    EggButton.Size = UDim2.new(0.9, 0, 0, 30)
 
---==================================================
--- LOCK BUTTON
---==================================================
+    EggButton.BackgroundColor3 =
+        Color3.fromRGB(55,55,55)
 
-LockButton.MouseButton1Click:Connect(function()
+    EggButton.Text = eggName
+    EggButton.TextColor3 =
+        Color3.fromRGB(255,255,255)
 
-    -- LOCK
-    if not isLocked then
+    EggButton.TextSize = 13
+    EggButton.Font = Enum.Font.SourceSansBold
+    EggButton.Parent = ScrollingFrame
 
-        local heldItem = GetHeldItem()
+    local ButtonCorner = Instance.new("UICorner")
+    ButtonCorner.CornerRadius = UDim.new(0,5)
+    ButtonCorner.Parent = EggButton
 
-        if not heldItem then
+    EggButton.MouseButton1Click:Connect(function()
 
-            Status.Text = "⚠️ Pegang Egg dulu!"
+        selectedEgg = eggName
 
-            task.delay(1.5, function()
-                if not isLocked then
-                    Status.Text = "🔓 UNLOCKED"
-                end
-            end)
+        SelectedLabel.Text =
+            "Selected: " .. selectedEgg
 
-            return
+        -- Kalau ON, langsung cari egg baru
+        if isAutoEquipEnabled then
+            KeepEquipping()
         end
 
-        -- Simpan nama item yang sedang dipegang
-        lockedItemName = heldItem.Name
+        print("[AutoHold] Selected:", selectedEgg)
+    end)
+end
 
-        StartLock()
+-- Update canvas
+Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 
-        LockButton.Text = "🔓  UNLOCK"
+    ScrollingFrame.CanvasSize =
+        UDim2.new(
+            0,
+            0,
+            0,
+            Layout.AbsoluteContentSize.Y + 10
+        )
 
-        LockButton.BackgroundColor3 =
-            Color3.fromRGB(45, 185, 75)
+end)
 
-        Status.Text =
-            "🔒 LOCKED: " .. lockedItemName
+-- ==========================================
+-- TOGGLE
+-- ==========================================
 
-    -- UNLOCK
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Size = UDim2.new(0.85, 0, 0, 35)
+ToggleBtn.Position = UDim2.new(0.075, 0, 0.82, 0)
+ToggleBtn.BackgroundColor3 =
+    Color3.fromRGB(200,50,50)
+
+ToggleBtn.Text = "STATUS: OFF"
+ToggleBtn.TextColor3 =
+    Color3.fromRGB(255,255,255)
+
+ToggleBtn.TextSize = 13
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.Parent = MainFrame
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(0,6)
+ToggleCorner.Parent = ToggleBtn
+
+ToggleBtn.MouseButton1Click:Connect(function()
+
+    isAutoEquipEnabled = not isAutoEquipEnabled
+
+    if isAutoEquipEnabled then
+
+        ToggleBtn.BackgroundColor3 =
+            Color3.fromRGB(50,180,50)
+
+        ToggleBtn.Text = "STATUS: ON"
+
+        StartAutoEquip()
+        KeepEquipping()
+
     else
 
-        StopLock()
+        ToggleBtn.BackgroundColor3 =
+            Color3.fromRGB(200,50,50)
 
-        LockButton.Text = "🔒  LOCK"
+        ToggleBtn.Text = "STATUS: OFF"
 
-        LockButton.BackgroundColor3 =
-            Color3.fromRGB(200, 55, 65)
+        StopAutoEquip()
 
-        Status.Text = "🔓 UNLOCKED"
     end
 end)
 
---==================================================
--- RESPAWN
---==================================================
-
-player.CharacterAdded:Connect(function(character)
-
-    if not isLocked then
-        return
-    end
-
-    task.wait(1)
-
-    KeepLockedItem()
-end)
-
---==================================================
--- BACKPACK UPDATE
---==================================================
-
-local backpack = player:WaitForChild("Backpack")
-
-backpack.ChildAdded:Connect(function(item)
-
-    if not isLocked then
-        return
-    end
-
-    if item:IsA("Tool") and matchItemName(item.Name) then
-
-        task.wait(0.1)
-
-        KeepLockedItem()
-    end
-end)
-
-print("================================")
-print("[Xyara Egg Lock] Loaded")
-print("[Xyara Egg Lock] Pegang Egg > LOCK")
-print("================================")
+print("[AutoHold] UI loaded!")
