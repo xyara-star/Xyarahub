@@ -5,7 +5,7 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 -- KONFIGURASI NAMA ITEM
-local ITEM_NAME = "Mythical Egg"
+local ITEM_NAME = "Jugle Egg"
 
 -- VARIABLE CONTROL
 local isAutoEquipEnabled = false
