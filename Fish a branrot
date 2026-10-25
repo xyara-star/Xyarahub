@@ -1,0 +1,140 @@
+local CoreGui = game:GetService("CoreGui")
+
+-- Hapus UI lama
+local guiName = "SimpleFarmHub"
+if CoreGui:FindFirstChild(guiName) then
+    CoreGui[guiName]:Destroy()
+end
+
+-- Base UI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = guiName
+ScreenGui.Parent = CoreGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 300, 0, 180)
+MainFrame.Position = UDim2.new(0.5, -150, 0.5, -90)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = MainFrame
+
+-- Title
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -40, 0, 40)
+Title.Position = UDim2.new(0, 10, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "Tab 1: Auto Farm"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 18
+Title.Font = Enum.Font.GothamBold
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = MainFrame
+
+-- Close Button
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 40, 0, 40)
+CloseBtn.Position = UDim2.new(1, -40, 0, 0)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 80, 80)
+CloseBtn.TextSize = 18
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.Parent = MainFrame
+
+-- Line Divider
+local Line = Instance.new("Frame")
+Line.Size = UDim2.new(1, 0, 0, 1)
+Line.Position = UDim2.new(0, 40, 0, 0)
+Line.BackgroundColor3 = Color3.fromRGB(60, 60, 65)
+Line.BorderSizePixel = 0
+Line.Parent = MainFrame
+
+-- Toggle Template
+local function CreateToggle(name, yPos)
+    local Button = Instance.new("TextButton")
+    Button.Size = UDim2.new(0, 260, 0, 40)
+    Button.Position = UDim2.new(0, 20, 0, yPos)
+    Button.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+    Button.Text = name .. " [ OFF ]"
+    Button.TextColor3 = Color3.fromRGB(255, 100, 100)
+    Button.Font = Enum.Font.GothamSemibold
+    Button.TextSize = 14
+    Button.Parent = MainFrame
+
+    local BtnCorner = Instance.new("UICorner")
+    BtnCorner.CornerRadius = UDim.new(0, 6)
+    BtnCorner.Parent = Button
+    
+    return Button
+end
+
+local BtnAutoReel = CreateToggle("Auto Reel", 60)
+local BtnAutoSell = CreateToggle("Auto Sell", 115)
+
+-- State Variables
+local getgenv = getgenv or function() return _G end
+getgenv().AutoReel = false
+getgenv().AutoSell = false
+
+-- Auto Reel Logic (100x/sec)
+BtnAutoReel.MouseButton1Click:Connect(function()
+    getgenv().AutoReel = not getgenv().AutoReel
+    
+    if getgenv().AutoReel then
+        BtnAutoReel.Text = "Auto Reel [ ON ]"
+        BtnAutoReel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        
+        task.spawn(function()
+            while getgenv().AutoReel do
+                task.wait(0.01)
+                pcall(function()
+                    local args = {
+                        1.85,
+                        Vector3.new(192.593017578125, 10.694999694824219, 95.5627670288086),
+                        true,
+                        false
+                    }
+                    game:GetService("ReplicatedStorage").Remotes.Gameplay.CatchItem:FireServer(unpack(args))
+                end)
+            end
+        end)
+    else
+        BtnAutoReel.Text = "Auto Reel [ OFF ]"
+        BtnAutoReel.TextColor3 = Color3.fromRGB(255, 100, 100)
+    end
+end)
+
+-- Auto Sell Logic (100x/sec)
+BtnAutoSell.MouseButton1Click:Connect(function()
+    getgenv().AutoSell = not getgenv().AutoSell
+    
+    if getgenv().AutoSell then
+        BtnAutoSell.Text = "Auto Sell [ ON ]"
+        BtnAutoSell.TextColor3 = Color3.fromRGB(100, 255, 100)
+        
+        task.spawn(function()
+            while getgenv().AutoSell do
+                task.wait(0.01)
+                pcall(function()
+                    game:GetService("ReplicatedStorage").Remotes.Gameplay.SellAllItems:FireServer()
+                end)
+            end
+        end)
+    else
+        BtnAutoSell.Text = "Auto Sell [ OFF ]"
+        BtnAutoSell.TextColor3 = Color3.fromRGB(255, 100, 100)
+    end
+end)
+
+-- Close Event
+CloseBtn.MouseButton1Click:Connect(function()
+    getgenv().AutoReel = false
+    getgenv().AutoSell = false
+    ScreenGui:Destroy()
+end)
