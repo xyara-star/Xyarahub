@@ -1,5 +1,6 @@
 -- =========================================================
---  ALL-IN-ONE (MINIMALIST UI): Auto Walk A<->B + Hide + No Clip
+--  ALL-IN-ONE v2: Farm (Point 1 <-> 2) + Walk + Hide + NoClip
+--  Minimalist wide UI with tabs
 -- =========================================================
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
@@ -9,25 +10,40 @@ local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
 -- ================= STATE =================
+-- Farm (Point 1 <-> 2)
+local AutoFarmEnabled = false
+local FarmPoint1 = nil
+local FarmPoint2 = nil
+local FarmPhase = "IDLE"       -- IDLE / FARMING_TO_P2 / RETURNING_TO_P1
+local FarmSpeed = 120          -- speed gerak dari P1 ke P2
+local currentTarget = nil
+local lastTargetRefresh = 0
+local lastFarmPos = Vector3.new()
+local stuckTimer = 0
+local STUCK_TIME = 1.5
+local climbing = false
+local climbEndTime = 0
+local CLIMB_DURATION = 1.0
+
+-- Walk
 local WalkRunning = false
 local WalkSpeed = 120
 local HomePos = nil
 local TargetPos = nil
 local WalkPhase = "IDLE"
-local lastPos = Vector3.new()
-local stuckTimer = 0
-local STUCK_TIME = 1.5
-local CLIMB_DURATION = 1.0
-local climbing = false
-local climbEndTime = 0
+local walkLastPos = Vector3.new()
+local walkStuckTimer = 0
+local walkClimbing = false
+local walkClimbEndTime = 0
 
+-- Hide / NoClip
 local HideActive = false
-local HideOpts = { Buildings = true, NPCs = true, Effects = true, GUI = true, Lighting = true }
+local HideOpts = { Buildings = true, Effects = true, GUI = false, Lighting = false }
 local SavedData = { parts = {}, decals = {}, guis = {}, effects = {}, lighting = {} }
-local WatcherConn = nil
-
 local NoClipActive = false
 local NoClipConn = nil
+
+local ActiveTab = "FARM"
 
 -- ================= HELPERS =================
 local function getHRP()
@@ -43,12 +59,9 @@ local function isCharacterPart(obj)
     if not char then return false end
     return obj:IsDescendantOf(char)
 end
-local function isNPC(obj)
-    if not obj:IsA("Model") then return false end
-    if not obj:FindFirstChildOfClass("Humanoid") then return false end
-    if Players:GetPlayerFromCharacter(obj) then return false end
-    if obj == LocalPlayer.Character then return false end
-    return true
+local function getNPCRoot(npc)
+    return npc:FindFirstChild("HumanoidRootPart") or npc.PrimaryPart
+        or npc:FindFirstChildWhichIsA("BasePart")
 end
 
 -- ================= UI HELPERS =================
@@ -63,16 +76,17 @@ local function stroke(o, c, t)
     return new("UIStroke", { Color = c, Thickness = t, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, o)
 end
 
-local BG = Color3.fromRGB(12, 12, 18)
-local CARD = Color3.fromRGB(22, 22, 32)
-local CHIP = Color3.fromRGB(32, 32, 45)
-local ACCENT = Color3.fromRGB(139, 92, 246)
-local ACCENT2 = Color3.fromRGB(34, 211, 238)
-local TEXT = Color3.fromRGB(235, 235, 245)
-local SUBTEXT = Color3.fromRGB(140, 140, 160)
-local EDGE = Color3.fromRGB(50, 45, 75)
-local WARN = Color3.fromRGB(250, 180, 90)
-local SUCCESS = Color3.fromRGB(90, 250, 140)
+local BG = Color3.fromRGB(10,10,18)
+local CARD = Color3.fromRGB(20,20,34)
+local CHIP = Color3.fromRGB(28,28,46)
+local ACCENT = Color3.fromRGB(139,92,246)
+local ACCENT2 = Color3.fromRGB(34,211,238)
+local TEXT = Color3.fromRGB(235,235,245)
+local SUBTEXT = Color3.fromRGB(130,130,160)
+local EDGE = Color3.fromRGB(45,40,75)
+local WARN = Color3.fromRGB(250,180,90)
+local SUCCESS = Color3.fromRGB(90,250,140)
+local DANGER = Color3.fromRGB(250,130,130)
 
 -- ================= GUI ROOT =================
 local function playerGui()
@@ -96,295 +110,1122 @@ if type(syn) == "table" and syn.protect_gui then pcall(syn.protect_gui, Gui) end
 local okP = pcall(function() Gui.Parent = parentGui end)
 if not okP or Gui.Parent ~= parentGui then Gui.Parent = playerGui() end
 
--- ================= MINIMALIST MAIN FRAME =================
-local FULL_W = 260
-local FULL_H = 370
+-- ================= MAIN FRAME =================
+local W = 520
+local H = 340
 local Main = new("Frame", {
-    Size = UDim2.new(0, FULL_W, 0, FULL_H),
-    Position = UDim2.new(0.5, -FULL_W/2, 0.5, -FULL_H/2),
+    Size = UDim2.new(0,W,0,H),
+    Position = UDim2.new(0.5,-W/2,0.5,-H/2),
     BackgroundColor3 = BG,
     BorderSizePixel = 0,
     ClipsDescendants = true,
 }, Gui)
-corner(Main, 10)
+corner(Main,12)
 stroke(Main, Color3.fromRGB(70,55,120), 1.5)
 
--- HEADER
-local Header = new("Frame", { Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = Color3.fromRGB(255,255,255) }, Main)
+-- Header
+local Header = new("Frame", {
+    Size = UDim2.new(1,0,0,36),
+    BackgroundColor3 = Color3.fromRGB(255,255,255),
+    BorderSizePixel = 0,
+}, Main)
 new("UIGradient", { Color = ColorSequence.new(ACCENT, ACCENT2), Rotation = 0 }, Header)
 
-new("TextLabel", { Size = UDim2.new(1, -70, 1, 0), Position = UDim2.new(0, 12, 0, 0), BackgroundTransparency = 1, Text = "⚡ ALL-IN-ONE (MINI)", TextColor3 = Color3.fromRGB(255,255,255), Font = Enum.Font.GothamBlack, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left }, Header)
+new("TextLabel", {
+    Size = UDim2.new(1,-100,1,0),
+    Position = UDim2.new(0,12,0,0),
+    BackgroundTransparency = 1,
+    Text = "⚡ ALL-IN-ONE",
+    TextColor3 = Color3.fromRGB(255,255,255),
+    Font = Enum.Font.GothamBlack,
+    TextSize = 13,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, Header)
 
-local MinBtn = new("TextButton", { Size = UDim2.new(0, 22, 0, 22), Position = UDim2.new(1, -52, 0.5, -11), BackgroundColor3 = Color3.fromRGB(0,0,0), BackgroundTransparency = 0.7, Text = "–", TextColor3 = Color3.fromRGB(255,255,255), Font = Enum.Font.GothamBold, TextSize = 14 }, Header); corner(MinBtn, 6)
-local CloseBtn = new("TextButton", { Size = UDim2.new(0, 22, 0, 22), Position = UDim2.new(1, -26, 0.5, -11), BackgroundColor3 = Color3.fromRGB(0,0,0), BackgroundTransparency = 0.7, Text = "✕", TextColor3 = Color3.fromRGB(255,255,255), Font = Enum.Font.GothamBold, TextSize = 11 }, Header); corner(CloseBtn, 6)
-
--- DRAG LOGIC
-local dragging, dragStart, startPos
-Header.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true; dragStart = input.Position; startPos = Main.Position
-        input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
-    end
-end)
-UIS.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local d = input.Position - dragStart
-        Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
-    end
-end)
-
--- BODY & LAYOUT
-local Body = new("ScrollingFrame", { Size = UDim2.new(1, -16, 1, -64), Position = UDim2.new(0, 8, 0, 36), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0, CanvasSize = UDim2.new(0, 0, 0, 305) }, Main)
-new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, Body)
-
-local LayoutIdx = 0
-local function addTitle(text)
-    LayoutIdx = LayoutIdx + 1
-    new("TextLabel", { Size = UDim2.new(1, 0, 0, 12), BackgroundTransparency = 1, Text = text, TextColor3 = ACCENT2, Font = Enum.Font.GothamBold, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = LayoutIdx }, Body)
+local function headerBtn(text, x, size)
+    local b = new("TextButton", {
+        Size = UDim2.new(0,24,0,24),
+        Position = UDim2.new(1,x,0.5,-12),
+        BackgroundColor3 = Color3.fromRGB(0,0,0),
+        BackgroundTransparency = 0.7,
+        Text = text,
+        TextColor3 = Color3.fromRGB(255,255,255),
+        Font = Enum.Font.GothamBold,
+        TextSize = size,
+    }, Header)
+    corner(b,6)
+    return b
 end
-local function addToggle(text)
-    LayoutIdx = LayoutIdx + 1
-    local btn = new("TextButton", { Size = UDim2.new(1, 0, 0, 26), BackgroundColor3 = CARD, Text = "", LayoutOrder = LayoutIdx, AutoButtonColor = false }, Body); corner(btn, 6); stroke(btn, EDGE, 1)
-    new("TextLabel", { Size = UDim2.new(1, -40, 1, 0), Position = UDim2.new(0, 10, 0, 0), BackgroundTransparency = 1, Text = text, TextColor3 = TEXT, Font = Enum.Font.GothamBold, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left }, btn)
-    local track = new("Frame", { Size = UDim2.new(0, 32, 0, 16), Position = UDim2.new(1, -40, 0.5, -8), BackgroundColor3 = Color3.fromRGB(45,45,68) }, btn); corner(track, 8)
-    local knob = new("Frame", { Size = UDim2.new(0, 14, 0, 14), Position = UDim2.new(0, 1, 0.5, -7), BackgroundColor3 = Color3.fromRGB(255,255,255) }, track); corner(knob, 7)
-    return btn, track, knob
-end
+local MinBtn = headerBtn("–", -56, 14)
+local CloseBtn = headerBtn("✕", -28, 11)
 
-local function animToggle(track, knob, state)
-    local i = TweenInfo.new(0.2, Enum.EasingStyle.Quad)
-    TweenService:Create(knob, i, { Position = state and UDim2.new(1, -15, 0.5, -7) or UDim2.new(0, 1, 0.5, -7) }):Play()
-    TweenService:Create(track, i, { BackgroundColor3 = state and ACCENT or Color3.fromRGB(45,45,68) }):Play()
-end
-
--- 1. WALK SECTION
-addTitle("🚶 AUTO WALK")
-local WalkBtn, WalkTrack, WalkKnob = addToggle("Enable Auto Walk")
-
-LayoutIdx = LayoutIdx + 1
-local PointRow = new("Frame", { Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, LayoutOrder = LayoutIdx }, Body)
-local SetHomeBtn = new("TextButton", { Size = UDim2.new(0.5, -3, 1, 0), Position = UDim2.new(0, 0, 0, 0), BackgroundColor3 = CHIP, Text = "🏠 Set P1", TextColor3 = TEXT, Font = Enum.Font.GothamBold, TextSize = 10 }, PointRow); corner(SetHomeBtn, 6); stroke(SetHomeBtn, EDGE, 1)
-local SetTargetBtn = new("TextButton", { Size = UDim2.new(0.5, -3, 1, 0), Position = UDim2.new(0.5, 3, 0, 0), BackgroundColor3 = CHIP, Text = "🎯 Set P2", TextColor3 = TEXT, Font = Enum.Font.GothamBold, TextSize = 10 }, PointRow); corner(SetTargetBtn, 6); stroke(SetTargetBtn, EDGE, 1)
-
-LayoutIdx = LayoutIdx + 1
-local PointStatus = new("TextLabel", { Size = UDim2.new(1, 0, 0, 12), BackgroundTransparency = 1, Text = "P1: - | P2: -", TextColor3 = SUBTEXT, Font = Enum.Font.Gotham, TextSize = 9, TextXAlignment = Enum.TextXAlignment.Center, LayoutOrder = LayoutIdx }, Body)
-
-LayoutIdx = LayoutIdx + 1
-local SpeedRow = new("Frame", { Size = UDim2.new(1, 0, 0, 24), BackgroundTransparency = 1, LayoutOrder = LayoutIdx }, Body)
-local speedBtns = {}
-for i, spd in ipairs({60, 120, 240, 500}) do
-    local b = new("TextButton", { Size = UDim2.new(0.25, -4, 1, 0), Position = UDim2.new((i-1)*0.25, 2, 0, 0), BackgroundColor3 = CHIP, Text = tostring(spd), TextColor3 = SUBTEXT, Font = Enum.Font.GothamBold, TextSize = 10 }, SpeedRow)
-    corner(b, 4); stroke(b, EDGE, 1); speedBtns[spd] = b
-    b.MouseButton1Click:Connect(function() 
-        WalkSpeed = spd
-        for s, btn in pairs(speedBtns) do
-            btn.BackgroundColor3 = (s == WalkSpeed) and ACCENT2 or CHIP
-            btn.TextColor3 = (s == WalkSpeed) and Color3.fromRGB(0,0,0) or SUBTEXT
+do
+    local dragging, dragStart, startPos
+    Header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = Main.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch) then
+            local d = input.Position - dragStart
+            Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X,
+                                      startPos.Y.Scale, startPos.Y.Offset + d.Y)
         end
     end)
 end
-speedBtns[120].BackgroundColor3 = ACCENT2
-speedBtns[120].TextColor3 = Color3.fromRGB(0,0,0)
 
-local Space = new("Frame", { Size = UDim2.new(1, 0, 0, 4), BackgroundTransparency = 1, LayoutOrder = LayoutIdx + 1 }, Body); LayoutIdx = LayoutIdx + 1
+-- Tab bar
+local TabBar = new("Frame", {
+    Size = UDim2.new(1,0,0,32),
+    Position = UDim2.new(0,0,0,36),
+    BackgroundColor3 = CARD,
+    BorderSizePixel = 0,
+}, Main)
 
--- 2. HIDE SECTION
-addTitle("👻 HIDE VISUALS")
-local HideBtn, HideTrack, HideKnob = addToggle("Hide Everything")
+local tabs = {}
+local tabUnderline = new("Frame", {
+    Size = UDim2.new(0.25,0,0,2),
+    Position = UDim2.new(0,0,1,-2),
+    BackgroundColor3 = ACCENT,
+    BorderSizePixel = 0,
+}, TabBar)
 
-LayoutIdx = LayoutIdx + 1
-local HideOptsRow = new("Frame", { Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1, LayoutOrder = LayoutIdx }, Body)
-local hideKeys = { {"Buildings", "Bld"}, {"NPCs", "NPC"}, {"Effects", "FX"}, {"GUI", "GUI"} }
-for i, data in ipairs(hideKeys) do
-    local key, label = data[1], data[2]
-    local b = new("TextButton", { Size = UDim2.new(0.25, -4, 1, 0), Position = UDim2.new((i-1)*0.25, 2, 0, 0), BackgroundColor3 = ACCENT, Text = label, TextColor3 = Color3.fromRGB(255,255,255), Font = Enum.Font.GothamBold, TextSize = 10 }, HideOptsRow)
-    corner(b, 4)
-    b.MouseButton1Click:Connect(function()
-        HideOpts[key] = not HideOpts[key]
-        b.BackgroundColor3 = HideOpts[key] and ACCENT or CHIP
-        b.TextColor3 = HideOpts[key] and Color3.fromRGB(255,255,255) or SUBTEXT
-        if HideActive then pcall(restoreAll); pcall(applyHide) end
-    end)
+local function createTab(name, label, index)
+    local t = new("TextButton", {
+        Size = UDim2.new(0.25,0,1,0),
+        Position = UDim2.new((index-1)*0.25,0,0,0),
+        BackgroundTransparency = 1,
+        Text = label,
+        TextColor3 = (ActiveTab == name) and TEXT or SUBTEXT,
+        Font = Enum.Font.GothamBold,
+        TextSize = 11,
+    }, TabBar)
+    tabs[name] = t
+    return t
 end
 
-local Space2 = new("Frame", { Size = UDim2.new(1, 0, 0, 4), BackgroundTransparency = 1, LayoutOrder = LayoutIdx + 1 }, Body); LayoutIdx = LayoutIdx + 1
+local Content = new("Frame", {
+    Size = UDim2.new(1,0,1,-68),
+    Position = UDim2.new(0,0,0,68),
+    BackgroundTransparency = 1,
+}, Main)
 
--- 3. NO CLIP SECTION
-addTitle("🌀 NO CLIP")
-local NoClipBtn, NoClipTrack, NoClipKnob = addToggle("Enable No Clip")
+-- ===================================================
+-- TAB 1: FARM (Point 1 <-> Point 2)
+-- ===================================================
+local FarmPage = new("Frame", {
+    Size = UDim2.new(1,0,1,0),
+    BackgroundTransparency = 1,
+    Visible = true,
+}, Content)
 
--- STATUS BAR
-local StatusBar = new("Frame", { Size = UDim2.new(1, 0, 0, 24), Position = UDim2.new(0, 0, 1, -24), BackgroundColor3 = CARD, BorderSizePixel = 0 }, Main)
-local StatusLabel = new("TextLabel", { Size = UDim2.new(1, -16, 1, 0), Position = UDim2.new(0, 8, 0, 0), BackgroundTransparency = 1, Text = "● Ready", TextColor3 = SUBTEXT, Font = Enum.Font.Gotham, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Left }, StatusBar)
+-- Farm toggle
+local FarmToggle = new("TextButton", {
+    Size = UDim2.new(1,-16,0,52),
+    Position = UDim2.new(0,8,0,5),
+    BackgroundColor3 = CARD,
+    Text = "",
+    AutoButtonColor = false,
+}, FarmPage)
+corner(FarmToggle,8)
+stroke(FarmToggle, EDGE, 1)
+
+new("TextLabel", {
+    Size = UDim2.new(1,-70,0,22),
+    Position = UDim2.new(0,12,0,6),
+    BackgroundTransparency = 1,
+    Text = "Auto Farm (Point 1 ↔ 2)",
+    TextColor3 = TEXT,
+    Font = Enum.Font.GothamBold,
+    TextSize = 12,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, FarmToggle)
+new("TextLabel", {
+    Size = UDim2.new(1,-70,0,14),
+    Position = UDim2.new(0,12,0,28),
+    BackgroundTransparency = 1,
+    Text = "Farm P1 → P2 → balik P1 → loop",
+    TextColor3 = SUBTEXT,
+    Font = Enum.Font.Gotham,
+    TextSize = 9,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, FarmToggle)
+
+local FarmTrack = new("Frame", {
+    Size = UDim2.new(0,42,0,22),
+    Position = UDim2.new(1,-54,0.5,-11),
+    BackgroundColor3 = Color3.fromRGB(45,45,68),
+    BorderSizePixel = 0,
+}, FarmToggle)
+corner(FarmTrack,11)
+local FarmKnob = new("Frame", {
+    Size = UDim2.new(0,16,0,16),
+    Position = UDim2.new(0,3,0.5,-8),
+    BackgroundColor3 = Color3.fromRGB(255,255,255),
+    BorderSizePixel = 0,
+}, FarmTrack)
+corner(FarmKnob,8)
+
+local function renderFarmToggle()
+    local info = TweenInfo.new(0.18, Enum.EasingStyle.Quad)
+    TweenService:Create(FarmKnob, info, {
+        Position = AutoFarmEnabled and UDim2.new(1,-19,0.5,-8) or UDim2.new(0,3,0.5,-8)
+    }):Play()
+    TweenService:Create(FarmTrack, info, {
+        BackgroundColor3 = AutoFarmEnabled and ACCENT or Color3.fromRGB(45,45,68)
+    }):Play()
+end
+
+-- Point 1 row
+local P1Row = new("Frame", {
+    Size = UDim2.new(0.5,-10,0,58),
+    Position = UDim2.new(0,8,0,64),
+    BackgroundColor3 = CARD,
+    BorderSizePixel = 0,
+}, FarmPage)
+corner(P1Row,8)
+
+new("TextLabel", {
+    Size = UDim2.new(1,-10,0,14),
+    Position = UDim2.new(0,8,0,4),
+    BackgroundTransparency = 1,
+    Text = "START (Point 1)",
+    TextColor3 = SUCCESS,
+    Font = Enum.Font.GothamBold,
+    TextSize = 9,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, P1Row)
+
+local SetP1Btn = new("TextButton", {
+    Size = UDim2.new(0,110,0,26),
+    Position = UDim2.new(0,6,0,22),
+    BackgroundColor3 = SUCCESS,
+    Text = "📍 Set Point 1",
+    TextColor3 = Color3.fromRGB(0,0,0),
+    Font = Enum.Font.GothamBold,
+    TextSize = 10,
+}, P1Row)
+corner(SetP1Btn,5)
+
+local P1Label = new("TextLabel", {
+    Size = UDim2.new(1,-124,0,26),
+    Position = UDim2.new(0,120,0,22),
+    BackgroundTransparency = 1,
+    Text = "Not set",
+    TextColor3 = SUBTEXT,
+    Font = Enum.Font.Gotham,
+    TextSize = 9,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, P1Row)
+
+-- Point 2 row
+local P2Row = new("Frame", {
+    Size = UDim2.new(0.5,-10,0,58),
+    Position = UDim2.new(0.5,2,0,64),
+    BackgroundColor3 = CARD,
+    BorderSizePixel = 0,
+}, FarmPage)
+corner(P2Row,8)
+
+new("TextLabel", {
+    Size = UDim2.new(1,-10,0,14),
+    Position = UDim2.new(0,8,0,4),
+    BackgroundTransparency = 1,
+    Text = "END (Point 2)",
+    TextColor3 = ACCENT2,
+    Font = Enum.Font.GothamBold,
+    TextSize = 9,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, P2Row)
+
+local SetP2Btn = new("TextButton", {
+    Size = UDim2.new(0,110,0,26),
+    Position = UDim2.new(0,6,0,22),
+    BackgroundColor3 = ACCENT2,
+    Text = "📍 Set Point 2",
+    TextColor3 = Color3.fromRGB(0,0,0),
+    Font = Enum.Font.GothamBold,
+    TextSize = 10,
+}, P2Row)
+corner(SetP2Btn,5)
+
+local P2Label = new("TextLabel", {
+    Size = UDim2.new(1,-124,0,26),
+    Position = UDim2.new(0,120,0,22),
+    BackgroundTransparency = 1,
+    Text = "Not set",
+    TextColor3 = SUBTEXT,
+    Font = Enum.Font.Gotham,
+    TextSize = 9,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, P2Row)
+
+local function renderFarmPoints()
+    if FarmPoint1 then
+        P1Label.Text = string.format("%d,%d,%d",
+            math.floor(FarmPoint1.X), math.floor(FarmPoint1.Y), math.floor(FarmPoint1.Z))
+        P1Label.TextColor3 = SUCCESS
+    else
+        P1Label.Text = "Not set"
+        P1Label.TextColor3 = SUBTEXT
+    end
+    if FarmPoint2 then
+        P2Label.Text = string.format("%d,%d,%d",
+            math.floor(FarmPoint2.X), math.floor(FarmPoint2.Y), math.floor(FarmPoint2.Z))
+        P2Label.TextColor3 = ACCENT2
+    else
+        P2Label.Text = "Not set"
+        P2Label.TextColor3 = SUBTEXT
+    end
+end
+renderFarmPoints()
+
+-- Farm speed
+new("TextLabel", {
+    Size = UDim2.new(1,-16,0,14),
+    Position = UDim2.new(0,12,0,130),
+    BackgroundTransparency = 1,
+    Text = "FARM SPEED",
+    TextColor3 = SUBTEXT,
+    Font = Enum.Font.GothamBold,
+    TextSize = 9,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, FarmPage)
+
+local farmSpeedBtns = {}
+local renderFarmSpeed
+for i, spd in ipairs({60,120,240,500}) do
+    local b = new("TextButton", {
+        Size = UDim2.new(0.25,-9,0,28),
+        Position = UDim2.new((i-1)*0.25, 8+(i-1)*3, 0, 148),
+        BackgroundColor3 = CHIP,
+        Text = tostring(spd),
+        TextColor3 = SUBTEXT,
+        Font = Enum.Font.GothamBold,
+        TextSize = 11,
+        AutoButtonColor = false,
+    }, FarmPage)
+    corner(b,5)
+    stroke(b, EDGE, 1)
+    farmSpeedBtns[spd] = b
+    b.MouseButton1Click:Connect(function()
+        FarmSpeed = spd
+        renderFarmSpeed()
+    end)
+end
+renderFarmSpeed = function()
+    for spd, btn in pairs(farmSpeedBtns) do
+        if spd == FarmSpeed then
+            btn.BackgroundColor3 = ACCENT2
+            btn.TextColor3 = Color3.fromRGB(0,0,0)
+            local st = btn:FindFirstChildOfClass("UIStroke"); if st then st.Color = ACCENT2 end
+        else
+            btn.BackgroundColor3 = CHIP
+            btn.TextColor3 = SUBTEXT
+            local st = btn:FindFirstChildOfClass("UIStroke"); if st then st.Color = EDGE end
+        end
+    end
+end
+renderFarmSpeed()
+
+-- Info
+local FarmInfo = new("TextLabel", {
+    Size = UDim2.new(1,-16,0,50),
+    Position = UDim2.new(0,8,0,184),
+    BackgroundColor3 = CARD,
+    Text = "💡 Set P1 di area awal farm, Set P2 di area akhir.\nAuto Farm akan scan NPC & teleport di antara P1-P2.",
+    TextColor3 = SUBTEXT,
+    Font = Enum.Font.Gotham,
+    TextSize = 9,
+    TextWrapped = true,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextYAlignment = Enum.TextYAlignment.Top,
+}, FarmPage)
+corner(FarmInfo,6)
+FarmInfo:GetPropertyChangedSignal("Text"):Connect(function() end)
+
+-- ===================================================
+-- TAB 2: WALK
+-- ===================================================
+local WalkPage = new("Frame", {
+    Size = UDim2.new(1,0,1,0),
+    BackgroundTransparency = 1,
+    Visible = false,
+}, Content)
+
+local WalkToggle = new("TextButton", {
+    Size = UDim2.new(1,-16,0,52),
+    Position = UDim2.new(0,8,0,5),
+    BackgroundColor3 = CARD,
+    Text = "",
+    AutoButtonColor = false,
+}, WalkPage)
+corner(WalkToggle,8)
+stroke(WalkToggle, EDGE, 1)
+
+new("TextLabel", {
+    Size = UDim2.new(1,-70,0,22),
+    Position = UDim2.new(0,12,0,6),
+    BackgroundTransparency = 1,
+    Text = "Auto Walk A ↔ B",
+    TextColor3 = TEXT,
+    Font = Enum.Font.GothamBold,
+    TextSize = 12,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, WalkToggle)
+new("TextLabel", {
+    Size = UDim2.new(1,-70,0,14),
+    Position = UDim2.new(0,12,0,28),
+    BackgroundTransparency = 1,
+    Text = "Home → Target → Home → loop",
+    TextColor3 = SUBTEXT,
+    Font = Enum.Font.Gotham,
+    TextSize = 9,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, WalkToggle)
+
+local WalkTrack = new("Frame", {
+    Size = UDim2.new(0,42,0,22),
+    Position = UDim2.new(1,-54,0.5,-11),
+    BackgroundColor3 = Color3.fromRGB(45,45,68),
+    BorderSizePixel = 0,
+}, WalkToggle)
+corner(WalkTrack,11)
+local WalkKnob = new("Frame", {
+    Size = UDim2.new(0,16,0,16),
+    Position = UDim2.new(0,3,0.5,-8),
+    BackgroundColor3 = Color3.fromRGB(255,255,255),
+    BorderSizePixel = 0,
+}, WalkTrack)
+corner(WalkKnob,8)
+
+local function renderWalkToggle()
+    local info = TweenInfo.new(0.18, Enum.EasingStyle.Quad)
+    TweenService:Create(WalkKnob, info, {
+        Position = WalkRunning and UDim2.new(1,-19,0.5,-8) or UDim2.new(0,3,0.5,-8)
+    }):Play()
+    TweenService:Create(WalkTrack, info, {
+        BackgroundColor3 = WalkRunning and ACCENT or Color3.fromRGB(45,45,68)
+    }):Play()
+end
+
+local HomeRow = new("Frame", {
+    Size = UDim2.new(0.5,-10,0,40),
+    Position = UDim2.new(0,8,0,64),
+    BackgroundColor3 = CARD,
+    BorderSizePixel = 0,
+}, WalkPage)
+corner(HomeRow,8)
+
+local SetHomeBtn = new("TextButton", {
+    Size = UDim2.new(0,110,0,26),
+    Position = UDim2.new(0,5,0.5,-13),
+    BackgroundColor3 = SUCCESS,
+    Text = "🏠 Set Home",
+    TextColor3 = Color3.fromRGB(0,0,0),
+    Font = Enum.Font.GothamBold,
+    TextSize = 10,
+}, HomeRow)
+corner(SetHomeBtn,5)
+
+local HomeLabel = new("TextLabel", {
+    Size = UDim2.new(1,-120,1,0),
+    Position = UDim2.new(0,118,0,0),
+    BackgroundTransparency = 1,
+    Text = "Not set",
+    TextColor3 = SUBTEXT,
+    Font = Enum.Font.Gotham,
+    TextSize = 9,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, HomeRow)
+
+local TargetRow = new("Frame", {
+    Size = UDim2.new(0.5,-10,0,40),
+    Position = UDim2.new(0.5,2,0,64),
+    BackgroundColor3 = CARD,
+    BorderSizePixel = 0,
+}, WalkPage)
+corner(TargetRow,8)
+
+local SetTargetBtn = new("TextButton", {
+    Size = UDim2.new(0,110,0,26),
+    Position = UDim2.new(0,5,0.5,-13),
+    BackgroundColor3 = ACCENT2,
+    Text = "🎯 Set Target",
+    TextColor3 = Color3.fromRGB(0,0,0),
+    Font = Enum.Font.GothamBold,
+    TextSize = 10,
+}, TargetRow)
+corner(SetTargetBtn,5)
+
+local TargetLabel = new("TextLabel", {
+    Size = UDim2.new(1,-120,1,0),
+    Position = UDim2.new(0,118,0,0),
+    BackgroundTransparency = 1,
+    Text = "Not set",
+    TextColor3 = SUBTEXT,
+    Font = Enum.Font.Gotham,
+    TextSize = 9,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, TargetRow)
+
+local function renderWalkPoints()
+    if HomePos then
+        HomeLabel.Text = string.format("%d,%d,%d",
+            math.floor(HomePos.X), math.floor(HomePos.Y), math.floor(HomePos.Z))
+        HomeLabel.TextColor3 = SUCCESS
+    else
+        HomeLabel.Text = "Not set"
+        HomeLabel.TextColor3 = SUBTEXT
+    end
+    if TargetPos then
+        TargetLabel.Text = string.format("%d,%d,%d",
+            math.floor(TargetPos.X), math.floor(TargetPos.Y), math.floor(TargetPos.Z))
+        TargetLabel.TextColor3 = ACCENT2
+    else
+        TargetLabel.Text = "Not set"
+        TargetLabel.TextColor3 = SUBTEXT
+    end
+end
+renderWalkPoints()
+
+new("TextLabel", {
+    Size = UDim2.new(1,-16,0,14),
+    Position = UDim2.new(0,12,0,110),
+    BackgroundTransparency = 1,
+    Text = "WALK SPEED",
+    TextColor3 = SUBTEXT,
+    Font = Enum.Font.GothamBold,
+    TextSize = 9,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, WalkPage)
+
+local speedBtns = {}
+local renderSpeed
+for i, spd in ipairs({60,120,240,500}) do
+    local b = new("TextButton", {
+        Size = UDim2.new(0.25,-9,0,28),
+        Position = UDim2.new((i-1)*0.25, 8+(i-1)*3, 0, 128),
+        BackgroundColor3 = CHIP,
+        Text = tostring(spd),
+        TextColor3 = SUBTEXT,
+        Font = Enum.Font.GothamBold,
+        TextSize = 11,
+        AutoButtonColor = false,
+    }, WalkPage)
+    corner(b,5)
+    stroke(b, EDGE, 1)
+    speedBtns[spd] = b
+    b.MouseButton1Click:Connect(function()
+        WalkSpeed = spd
+        renderSpeed()
+    end)
+end
+renderSpeed = function()
+    for spd, btn in pairs(speedBtns) do
+        if spd == WalkSpeed then
+            btn.BackgroundColor3 = ACCENT2
+            btn.TextColor3 = Color3.fromRGB(0,0,0)
+            local st = btn:FindFirstChildOfClass("UIStroke"); if st then st.Color = ACCENT2 end
+        else
+            btn.BackgroundColor3 = CHIP
+            btn.TextColor3 = SUBTEXT
+            local st = btn:FindFirstChildOfClass("UIStroke"); if st then st.Color = EDGE end
+        end
+    end
+end
+renderSpeed()
+
+-- ===================================================
+-- TAB 3: EXTRAS
+-- ===================================================
+local ExtraPage = new("Frame", {
+    Size = UDim2.new(1,0,1,0),
+    BackgroundTransparency = 1,
+    Visible = false,
+}, Content)
+
+local HideToggle = new("TextButton", {
+    Size = UDim2.new(1,-16,0,52),
+    Position = UDim2.new(0,8,0,5),
+    BackgroundColor3 = CARD,
+    Text = "",
+    AutoButtonColor = false,
+}, ExtraPage)
+corner(HideToggle,8)
+stroke(HideToggle, EDGE, 1)
+
+new("TextLabel", {
+    Size = UDim2.new(1,-70,0,22),
+    Position = UDim2.new(0,12,0,6),
+    BackgroundTransparency = 1,
+    Text = "Hide Everything",
+    TextColor3 = TEXT,
+    Font = Enum.Font.GothamBold,
+    TextSize = 12,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, HideToggle)
+new("TextLabel", {
+    Size = UDim2.new(1,-70,0,14),
+    Position = UDim2.new(0,12,0,28),
+    BackgroundTransparency = 1,
+    Text = "Buildings, effects",
+    TextColor3 = SUBTEXT,
+    Font = Enum.Font.Gotham,
+    TextSize = 9,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, HideToggle)
+
+local HideTrack = new("Frame", {
+    Size = UDim2.new(0,42,0,22),
+    Position = UDim2.new(1,-54,0.5,-11),
+    BackgroundColor3 = Color3.fromRGB(45,45,68),
+    BorderSizePixel = 0,
+}, HideToggle)
+corner(HideTrack,11)
+local HideKnob = new("Frame", {
+    Size = UDim2.new(0,16,0,16),
+    Position = UDim2.new(0,3,0.5,-8),
+    BackgroundColor3 = Color3.fromRGB(255,255,255),
+    BorderSizePixel = 0,
+}, HideTrack)
+corner(HideKnob,8)
+
+local function renderHideToggle()
+    local info = TweenInfo.new(0.18, Enum.EasingStyle.Quad)
+    TweenService:Create(HideKnob, info, {
+        Position = HideActive and UDim2.new(1,-19,0.5,-8) or UDim2.new(0,3,0.5,-8)
+    }):Play()
+    TweenService:Create(HideTrack, info, {
+        BackgroundColor3 = HideActive and ACCENT or Color3.fromRGB(45,45,68)
+    }):Play()
+end
+
+local NoClipToggle = new("TextButton", {
+    Size = UDim2.new(1,-16,0,52),
+    Position = UDim2.new(0,8,0,64),
+    BackgroundColor3 = CARD,
+    Text = "",
+    AutoButtonColor = false,
+}, ExtraPage)
+corner(NoClipToggle,8)
+stroke(NoClipToggle, EDGE, 1)
+
+new("TextLabel", {
+    Size = UDim2.new(1,-70,0,22),
+    Position = UDim2.new(0,12,0,6),
+    BackgroundTransparency = 1,
+    Text = "No Clip",
+    TextColor3 = TEXT,
+    Font = Enum.Font.GothamBold,
+    TextSize = 12,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, NoClipToggle)
+new("TextLabel", {
+    Size = UDim2.new(1,-70,0,14),
+    Position = UDim2.new(0,12,0,28),
+    BackgroundTransparency = 1,
+    Text = "Walk through all walls",
+    TextColor3 = SUBTEXT,
+    Font = Enum.Font.Gotham,
+    TextSize = 9,
+    TextXAlignment = Enum.TextXAlignment.Left,
+}, NoClipToggle)
+
+local NoClipTrack = new("Frame", {
+    Size = UDim2.new(0,42,0,22),
+    Position = UDim2.new(1,-54,0.5,-11),
+    BackgroundColor3 = Color3.fromRGB(45,45,68),
+    BorderSizePixel = 0,
+}, NoClipToggle)
+corner(NoClipTrack,11)
+local NoClipKnob = new("Frame", {
+    Size = UDim2.new(0,16,0,16),
+    Position = UDim2.new(0,3,0.5,-8),
+    BackgroundColor3 = Color3.fromRGB(255,255,255),
+    BorderSizePixel = 0,
+}, NoClipTrack)
+corner(NoClipKnob,8)
+
+local function renderNoClipToggle()
+    local info = TweenInfo.new(0.18, Enum.EasingStyle.Quad)
+    TweenService:Create(NoClipKnob, info, {
+        Position = NoClipActive and UDim2.new(1,-19,0.5,-8) or UDim2.new(0,3,0.5,-8)
+    }):Play()
+    TweenService:Create(NoClipTrack, info, {
+        BackgroundColor3 = NoClipActive and ACCENT or Color3.fromRGB(45,45,68)
+    }):Play()
+end
+
+-- ===================================================
+-- TAB 4: STATUS
+-- ===================================================
+local StatusPage = new("Frame", {
+    Size = UDim2.new(1,0,1,0),
+    BackgroundTransparency = 1,
+    Visible = false,
+}, Content)
+
+local StatusBox = new("Frame", {
+    Size = UDim2.new(1,-16,1,-16),
+    Position = UDim2.new(0,8,0,8),
+    BackgroundColor3 = CARD,
+    BorderSizePixel = 0,
+}, StatusPage)
+corner(StatusBox,8)
+
+local StatusLabel = new("TextLabel", {
+    Size = UDim2.new(1,-20,1,-20),
+    Position = UDim2.new(0,10,0,10),
+    BackgroundTransparency = 1,
+    Text = "● Ready",
+    TextColor3 = SUBTEXT,
+    Font = Enum.Font.Gotham,
+    TextSize = 10,
+    TextXAlignment = Enum.TextXAlignment.Left,
+    TextYAlignment = Enum.TextYAlignment.Top,
+    TextWrapped = true,
+}, StatusBox)
 
 local function setStatus(text, color)
     StatusLabel.Text = "● " .. text
     StatusLabel.TextColor3 = color or SUBTEXT
 end
-local function updatePointsLabel()
-    local p1 = HomePos and string.format("%d,%d", HomePos.X, HomePos.Z) or "-"
-    local p2 = TargetPos and string.format("%d,%d", TargetPos.X, TargetPos.Z) or "-"
-    PointStatus.Text = string.format("P1: %s  |  P2: %s", p1, p2)
+
+-- ===================================================
+-- TAB SWITCHING
+-- ===================================================
+local TabMap = {
+    FARM = FarmPage,
+    WALK = WalkPage,
+    EXTRA = ExtraPage,
+    STATUS = StatusPage
+}
+
+local function switchTab(name)
+    ActiveTab = name
+    for tabName, page in pairs(TabMap) do
+        page.Visible = (tabName == name)
+    end
+    for tabName, btn in pairs(tabs) do
+        btn.TextColor3 = (tabName == name) and TEXT or SUBTEXT
+    end
+    local idx = 1
+    if name == "WALK" then idx = 2
+    elseif name == "EXTRA" then idx = 3
+    elseif name == "STATUS" then idx = 4 end
+    TweenService:Create(tabUnderline, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
+        Position = UDim2.new((idx-1)*0.25, 0, 1, -2)
+    }):Play()
 end
 
--- ========== NO CLIP LOGIC ==========
+-- ===================================================
+-- NO CLIP LOGIC
+-- ===================================================
 local function applyNoClip()
     if NoClipConn then NoClipConn:Disconnect() end
     NoClipConn = RunService.Stepped:Connect(function()
         local char = LocalPlayer.Character
-        if char then
-            for _, part in ipairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then part.CanCollide = false end
+        if not char then return end
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
             end
         end
     end)
 end
-
 local function stopNoClip()
     if NoClipConn then NoClipConn:Disconnect(); NoClipConn = nil end
     local char = LocalPlayer.Character
     if char then
         for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") and (part.Name == "Torso" or part.Name == "UpperTorso" or part.Name == "LowerTorso" or part.Name == "Head") then
-                part.CanCollide = true
+            if part:IsA("BasePart") then
+                if part.Name == "Torso" or part.Name == "UpperTorso"
+                    or part.Name == "LowerTorso" or part.Name == "Head" then
+                    part.CanCollide = true
+                end
             end
         end
     end
 end
 
--- ========== HIDE ALL LOGIC ==========
-function applyHide()
+-- ===================================================
+-- HIDE ALL LOGIC
+-- ===================================================
+local function applyHide()
     SavedData = { parts = {}, decals = {}, guis = {}, effects = {}, lighting = {} }
+    local counts = { parts = 0, effects = 0 }
     if HideOpts.Buildings then
         for _, obj in ipairs(workspace:GetDescendants()) do
             if obj:IsA("BasePart") and not isCharacterPart(obj) then
                 SavedData.parts[obj] = { Transparency = obj.Transparency, Reflectance = obj.Reflectance }
-                obj.Transparency = 1; obj.Reflectance = 0
-            end
-        end
-    end
-    if HideOpts.NPCs then
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if isNPC(obj) then
-                for _, part in ipairs(obj:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        if not SavedData.parts[part] then SavedData.parts[part] = { Transparency = part.Transparency } end
-                        part.Transparency = 1
-                    end
-                    if part:IsA("BillboardGui") or part:IsA("SurfaceGui") then
-                        SavedData.guis[part] = { Enabled = part.Enabled }; part.Enabled = false
-                    end
-                end
+                obj.Transparency = 1
+                obj.Reflectance = 0
+                counts.parts = counts.parts + 1
             end
         end
     end
     if HideOpts.Effects then
         for _, obj in ipairs(workspace:GetDescendants()) do
-            if (obj:IsA("ParticleEmitter") or obj:IsA("Beam") or obj:IsA("Trail") or obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") or obj:IsA("Highlight")) and not isCharacterPart(obj) then
-                SavedData.effects[obj] = { Enabled = obj.Enabled }; obj.Enabled = false
+            if obj:IsA("ParticleEmitter") or obj:IsA("Beam") or obj:IsA("Trail")
+                or obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles")
+                or obj:IsA("Highlight") then
+                if not isCharacterPart(obj) then
+                    SavedData.effects[obj] = { Enabled = obj.Enabled }
+                    obj.Enabled = false
+                    counts.effects = counts.effects + 1
+                end
             end
             if (obj:IsA("Decal") or obj:IsA("Texture")) and not isCharacterPart(obj) then
-                SavedData.decals[obj] = { Transparency = obj.Transparency }; obj.Transparency = 1
+                SavedData.decals[obj] = { Transparency = obj.Transparency }
+                obj.Transparency = 1
             end
         end
     end
-    if HideOpts.GUI then
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if (obj:IsA("BillboardGui") or obj:IsA("SurfaceGui")) and not isCharacterPart(obj) then
-                if not SavedData.guis[obj] then SavedData.guis[obj] = { Enabled = obj.Enabled } end
-                obj.Enabled = false
-            end
-        end
-        local pg = playerGui()
-        for _, gui in ipairs(pg:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui ~= Gui and gui.Name ~= "AllInOneUI" and gui.Enabled then
-                SavedData.guis[gui] = { Enabled = true }; gui.Enabled = false
-            end
-        end
-    end
-    if HideOpts.Lighting then
-        SavedData.lighting = { Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient, Brightness = Lighting.Brightness, FogEnd = Lighting.FogEnd, FogStart = Lighting.FogStart, ClockTime = Lighting.ClockTime }
-        Lighting.Ambient = Color3.fromRGB(255,255,255); Lighting.OutdoorAmbient = Color3.fromRGB(255,255,255); Lighting.Brightness = 2; Lighting.FogEnd = 100000; Lighting.FogStart = 0; Lighting.ClockTime = 12
-        for _, obj in ipairs(Lighting:GetChildren()) do
-            if obj:IsA("Sky") then SavedData.lighting.Sky = obj; obj.Parent = nil end
-            if obj:IsA("Atmosphere") then SavedData.lighting.Atmosphere = { obj = obj, Density = obj.Density, Haze = obj.Haze }; obj.Density = 0; obj.Haze = 0 end
-            if obj:IsA("BloomEffect") or obj:IsA("BlurEffect") or obj:IsA("ColorCorrectionEffect") or obj:IsA("SunRaysEffect") then
-                SavedData.lighting[obj] = { Enabled = obj.Enabled }; obj.Enabled = false
-            end
-        end
-    end
-    setStatus("Visuals Hidden", SUCCESS)
+    setStatus(string.format("Hidden: %d parts, %d effects", counts.parts, counts.effects), SUCCESS)
 end
 
-function restoreAll()
-    for obj, data in pairs(SavedData.parts) do pcall(function() if obj and obj.Parent then obj.Transparency = data.Transparency or 0; if data.Reflectance then obj.Reflectance = data.Reflectance end end end) end
-    for obj, data in pairs(SavedData.decals) do pcall(function() if obj and obj.Parent then obj.Transparency = data.Transparency or 0 end end) end
-    for obj, data in pairs(SavedData.guis) do pcall(function() if obj and obj.Parent then obj.Enabled = data.Enabled or true end end) end
-    for obj, data in pairs(SavedData.effects) do pcall(function() if obj and obj.Parent then obj.Enabled = data.Enabled or true end end) end
-    if SavedData.lighting and HideOpts.Lighting then
-        local L = SavedData.lighting
+local function restoreAll()
+    for obj, data in pairs(SavedData.parts) do
         pcall(function()
-            if L.Ambient then Lighting.Ambient = L.Ambient end; if L.OutdoorAmbient then Lighting.OutdoorAmbient = L.OutdoorAmbient end; if L.Brightness then Lighting.Brightness = L.Brightness end; if L.FogEnd then Lighting.FogEnd = L.FogEnd end; if L.FogStart then Lighting.FogStart = L.FogStart end; if L.ClockTime then Lighting.ClockTime = L.ClockTime end; if L.Sky then L.Sky.Parent = Lighting end
-            if L.Atmosphere then L.Atmosphere.obj.Density = L.Atmosphere.Density; L.Atmosphere.obj.Haze = L.Atmosphere.Haze end
-            for k, v in pairs(L) do if typeof(k) == "Instance" and v.Enabled ~= nil then pcall(function() k.Enabled = v.Enabled end) end end
+            if obj and obj.Parent then
+                obj.Transparency = data.Transparency or 0
+                if data.Reflectance then obj.Reflectance = data.Reflectance end
+            end
+        end)
+    end
+    for obj, data in pairs(SavedData.decals) do
+        pcall(function()
+            if obj and obj.Parent then obj.Transparency = data.Transparency or 0 end
+        end)
+    end
+    for obj, data in pairs(SavedData.effects) do
+        pcall(function()
+            if obj and obj.Parent then obj.Enabled = data.Enabled or true end
         end)
     end
     SavedData = { parts = {}, decals = {}, guis = {}, effects = {}, lighting = {} }
 end
 
-local function startWatcher()
-    if WatcherConn then WatcherConn:Disconnect() end
-    WatcherConn = workspace.DescendantAdded:Connect(function(obj)
-        if not HideActive then return end; task.wait(0.05)
-        if not HideActive or not obj or not obj.Parent then return end
-        if HideOpts.Buildings and obj:IsA("BasePart") and not isCharacterPart(obj) then SavedData.parts[obj] = { Transparency = obj.Transparency }; obj.Transparency = 1 end
-        if HideOpts.Effects and (obj:IsA("ParticleEmitter") or obj:IsA("Beam") or obj:IsA("Trail")) then SavedData.effects[obj] = { Enabled = obj.Enabled }; obj.Enabled = false end
-        if HideOpts.GUI and (obj:IsA("BillboardGui") or obj:IsA("SurfaceGui")) then SavedData.guis[obj] = { Enabled = obj.Enabled }; obj.Enabled = false end
-    end)
+-- ===================================================
+-- FARM LOGIC (Point 1 <-> Point 2)
+-- ===================================================
+-- Cek apakah posisi di dalam "koridor" antara P1 dan P2
+-- (pakai bounding box + margin)
+local function inFarmZone(pos)
+    if not FarmPoint1 or not FarmPoint2 then return false end
+    local minX = math.min(FarmPoint1.X, FarmPoint2.X)
+    local maxX = math.max(FarmPoint1.X, FarmPoint2.X)
+    local minZ = math.min(FarmPoint1.Z, FarmPoint2.Z)
+    local maxZ = math.max(FarmPoint1.Z, FarmPoint2.Z)
+    local margin = 50  -- toleransi 50 stud di pinggir
+    return pos.X >= (minX - margin) and pos.X <= (maxX + margin)
+       and pos.Z >= (minZ - margin) and pos.Z <= (maxZ + margin)
 end
 
--- ========== AUTO WALK LOGIC ==========
+-- Cari NPC di dalam farm zone, urut berdasarkan jarak ke P2 (yang paling jauh dulu)
+local function scanNPCsInZone()
+    if not FarmPoint1 or not FarmPoint2 then return {} end
+    local results = {}
+    local char = LocalPlayer.Character
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Humanoid") and obj.Health > 0 then
+            local model = obj.Parent
+            if model and model:IsA("Model")
+                and not Players:GetPlayerFromCharacter(model)
+                and model ~= char then
+                local root = getNPCRoot(model)
+                if root and inFarmZone(root.Position) then
+                    local distToP2 = (root.Position - FarmPoint2).Magnitude
+                    table.insert(results, { model = model, hum = obj, root = root, distToP2 = distToP2 })
+                end
+            end
+        end
+    end
+    -- Urut dari yang paling deket ke P2 (biar maju dulu, baru balik)
+    table.sort(results, function(a, b) return a.distToP2 < b.distToP2 end)
+    return results
+end
+
+local function teleportToNPC(npc)
+    local hrp = getHRP()
+    if not hrp then return end
+    local root = getNPCRoot(npc)
+    if not root then return end
+    hrp.CFrame = root.CFrame * CFrame.new(0, 0, 3)
+end
+
+-- Cek apakah player sudah dekat P2 (buat trigger balik)
+local function nearP2(hrp)
+    if not FarmPoint2 then return false end
+    local dist = (Vector3.new(hrp.Position.X, 0, hrp.Position.Z)
+        - Vector3.new(FarmPoint2.X, 0, FarmPoint2.Z)).Magnitude
+    return dist < 15
+end
+
+-- Cek apakah player sudah dekat P1
+local function nearP1(hrp)
+    if not FarmPoint1 then return false end
+    local dist = (Vector3.new(hrp.Position.X, 0, hrp.Position.Z)
+        - Vector3.new(FarmPoint1.X, 0, FarmPoint1.Z)).Magnitude
+    return dist < 15
+end
+
+-- Gerak menuju target (pakai velocity)
+local function moveToward(hrp, targetPos, speed)
+    local now = os.clock()
+    local horizontal = Vector3.new(targetPos.X - hrp.Position.X, 0, targetPos.Z - hrp.Position.Z)
+    if horizontal.Magnitude < 0.5 then return end
+    local dir = horizontal.Unit
+
+    local moved = (hrp.Position - lastFarmPos).Magnitude
+    if moved < 1.5 then stuckTimer = stuckTimer + 0.1 else stuckTimer = 0 end
+    lastFarmPos = hrp.Position
+
+    if stuckTimer >= STUCK_TIME and not climbing then
+        climbing = true
+        climbEndTime = now + CLIMB_DURATION
+    end
+    if climbing and now >= climbEndTime then
+        climbing = false; stuckTimer = 0
+    end
+
+    local yVel = 0
+    if climbing then
+        yVel = 40
+    else
+        local params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Exclude
+        params.FilterDescendantsInstances = { LocalPlayer.Character }
+        params.IgnoreWater = true
+        local ray = workspace:Raycast(hrp.Position, Vector3.new(0,-15,0), params)
+        if ray then
+            local desiredY = ray.Position.Y + 3
+            local diff = desiredY - hrp.Position.Y
+            yVel = math.clamp(diff * 8, -25, 25)
+        end
+    end
+
+    hrp.AssemblyLinearVelocity = Vector3.new(dir.X * speed, yVel, dir.Z * speed)
+end
+
+-- Farm loop
+task.spawn(function()
+    while true do
+        task.wait(0.15)
+
+        if not AutoFarmEnabled then
+            if FarmPhase ~= "IDLE" then
+                FarmPhase = "IDLE"
+                currentTarget = nil
+                local hum = getHumanoid()
+                if hum then hum.WalkSpeed = 16 end
+                local hrp = getHRP()
+                if hrp then hrp.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+            end
+            continue
+        end
+
+        local hrp = getHRP()
+        if not hrp then continue end
+        if not FarmPoint1 or not FarmPoint2 then
+            setStatus("Set Point 1 & 2 first!", WARN)
+            task.wait(0.5)
+            continue
+        end
+
+        -- Start phase: kalau masih IDLE, mulai FARMING_TO_P2
+        if FarmPhase == "IDLE" then
+            FarmPhase = "FARMING_TO_P2"
+            lastFarmPos = hrp.Position
+            stuckTimer = 0
+            setStatus("Farm started: P1 → P2", ACCENT2)
+        end
+
+        -- ============ FARMING_TO_P2 ============
+        if FarmPhase == "FARMING_TO_P2" then
+            -- Cek udah deket P2? → balik
+            if nearP2(hrp) then
+                setStatus("Reached P2! Going back to P1...", SUCCESS)
+                FarmPhase = "RETURNING_TO_P1"
+                currentTarget = nil
+                task.wait(0.3)
+                continue
+            end
+
+            -- Validasi current target
+            if currentTarget then
+                local hum = currentTarget:FindFirstChildOfClass("Humanoid")
+                local root = getNPCRoot(currentTarget)
+                if not hum or hum.Health <= 0 or not currentTarget.Parent or not root
+                    or not inFarmZone(root.Position) then
+                    currentTarget = nil
+                end
+            end
+
+            -- Cari target baru
+            if not currentTarget then
+                local now = os.clock()
+                if now - lastTargetRefresh > 0.4 then
+                    lastTargetRefresh = now
+                    local npcs = scanNPCsInZone()
+                    if #npcs > 0 then
+                        currentTarget = npcs[1].model
+                    end
+                end
+            end
+
+            -- Eksekusi
+            if currentTarget then
+                teleportToNPC(currentTarget)
+                setStatus("[P1→P2] Farming: " .. currentTarget.Name, ACCENT2)
+            else
+                -- Ga ada NPC, jalan menuju P2
+                moveToward(hrp, FarmPoint2, FarmSpeed)
+                local dist = (Vector3.new(hrp.Position.X,0,hrp.Position.Z)
+                    - Vector3.new(FarmPoint2.X,0,FarmPoint2.Z)).Magnitude
+                setStatus(string.format("[P1→P2] Moving | %dm", math.floor(dist)), ACCENT2)
+            end
+
+        -- ============ RETURNING_TO_P1 ============
+        elseif FarmPhase == "RETURNING_TO_P1" then
+            if nearP1(hrp) then
+                setStatus("Reached P1! Going to P2 again...", SUCCESS)
+                FarmPhase = "FARMING_TO_P2"
+                currentTarget = nil
+                lastFarmPos = hrp.Position
+                stuckTimer = 0
+                task.wait(0.3)
+                continue
+            end
+
+            -- Validasi current target (boleh farm sambil balik juga)
+            if currentTarget then
+                local hum = currentTarget:FindFirstChildOfClass("Humanoid")
+                local root = getNPCRoot(currentTarget)
+                if not hum or hum.Health <= 0 or not currentTarget.Parent or not root
+                    or not inFarmZone(root.Position) then
+                    currentTarget = nil
+                end
+            end
+
+            if not currentTarget then
+                local now = os.clock()
+                if now - lastTargetRefresh > 0.4 then
+                    lastTargetRefresh = now
+                    local npcs = scanNPCsInZone()
+                    if #npcs > 0 then
+                        -- Saat balik, pilih NPC yang deket P1
+                        table.sort(npcs, function(a, b)
+                            local aD = (a.root.Position - FarmPoint1).Magnitude
+                            local bD = (b.root.Position - FarmPoint1).Magnitude
+                            return aD < bD
+                        end)
+                        currentTarget = npcs[1].model
+                    end
+                end
+            end
+
+            if currentTarget then
+                teleportToNPC(currentTarget)
+                setStatus("[P2→P1] Farming: " .. currentTarget.Name, SUCCESS)
+            else
+                moveToward(hrp, FarmPoint1, FarmSpeed)
+                local dist = (Vector3.new(hrp.Position.X,0,hrp.Position.Z)
+                    - Vector3.new(FarmPoint1.X,0,FarmPoint1.Z)).Magnitude
+                setStatus(string.format("[P2→P1] Moving | %dm", math.floor(dist)), SUCCESS)
+            end
+        end
+    end
+end)
+
+-- ===================================================
+-- WALK LOGIC
+-- ===================================================
 local function stopWalkMotion()
-    local hum = getHumanoid(); if hum then hum.WalkSpeed = 16 end
-    local hrp = getHRP(); if hrp then hrp.AssemblyLinearVelocity = Vector3.new(0,0,0) end
-    climbing = false; stuckTimer = 0
+    local hum = getHumanoid()
+    if hum then hum.WalkSpeed = 16 end
+    local hrp = getHRP()
+    if hrp then hrp.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+    walkClimbing = false
+    walkStuckTimer = 0
 end
 
 local function obstacleAhead(hrp, dir, dist)
-    local params = RaycastParams.new(); params.FilterType = Enum.RaycastFilterType.Exclude; params.FilterDescendantsInstances = { LocalPlayer.Character }; params.IgnoreWater = true
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = { LocalPlayer.Character }
+    params.IgnoreWater = true
     local ray = workspace:Raycast(hrp.Position, dir.Unit * dist, params)
-    if not ray or not ray.Instance or not ray.Instance.CanCollide or ray.Instance.Transparency >= 0.7 or ray.Instance.Size.Magnitude < 4 then return false end
+    if not ray then return false end
+    local hit = ray.Instance
+    if not hit then return false end
+    if not hit.CanCollide then return false end
+    if hit.Transparency >= 0.7 then return false end
+    if hit.Size.Magnitude < 4 then return false end
     return true
 end
 
 local function groundBelow(hrp, maxDist)
-    local params = RaycastParams.new(); params.FilterType = Enum.RaycastFilterType.Exclude; params.FilterDescendantsInstances = { LocalPlayer.Character }; params.IgnoreWater = true
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = { LocalPlayer.Character }
+    params.IgnoreWater = true
     local ray = workspace:Raycast(hrp.Position, Vector3.new(0,-maxDist,0), params)
-    return ray and ray.Position.Y or nil
+    if ray then return ray.Position.Y end
+    return nil
 end
 
-local function moveToward(hrp, targetPos, speed)
+local function walkMoveToward(hrp, targetPos, speed)
     local now = os.clock()
     local horizontal = Vector3.new(targetPos.X - hrp.Position.X, 0, targetPos.Z - hrp.Position.Z)
-    if horizontal.Magnitude < 0.5 then hrp.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0); return end
+    if horizontal.Magnitude < 0.5 then
+        hrp.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
+        return
+    end
     local dir = horizontal.Unit
-    local moved = (hrp.Position - lastPos).Magnitude
-    if moved < 1.5 then stuckTimer = stuckTimer + 0.1 else stuckTimer = 0 end
-    lastPos = hrp.Position
-    if stuckTimer >= STUCK_TIME and not climbing then climbing = true; climbEndTime = now + CLIMB_DURATION end
-    if climbing and now >= climbEndTime then climbing = false; stuckTimer = 0 end
+
+    local moved = (hrp.Position - walkLastPos).Magnitude
+    if moved < 1.5 then walkStuckTimer = walkStuckTimer + 0.1 else walkStuckTimer = 0 end
+    walkLastPos = hrp.Position
+
+    if walkStuckTimer >= STUCK_TIME and not walkClimbing then
+        walkClimbing = true
+        walkClimbEndTime = now + CLIMB_DURATION
+    end
+    if walkClimbing and now >= walkClimbEndTime then
+        walkClimbing = false; walkStuckTimer = 0
+    end
 
     local probeDist = math.max(3, speed * 0.03)
     local blocked = obstacleAhead(hrp, dir, probeDist)
     local yVel = 0
-    if climbing then yVel = 40
+
+    if walkClimbing then yVel = 40
     elseif blocked then
-        yVel = 30; local rightDir = Vector3.new(-dir.Z, 0, dir.X)
-        if not obstacleAhead(hrp, rightDir, probeDist) then dir = (dir * 0.7 + rightDir * 0.3).Unit
-        elseif not obstacleAhead(hrp, -rightDir, probeDist) then dir = (dir * 0.7 - rightDir * 0.3).Unit end
+        yVel = 30
+        local rightDir = Vector3.new(-dir.Z, 0, dir.X)
+        if not obstacleAhead(hrp, rightDir, probeDist) then
+            dir = (dir * 0.7 + rightDir * 0.3).Unit
+        elseif not obstacleAhead(hrp, -rightDir, probeDist) then
+            dir = (dir * 0.7 - rightDir * 0.3).Unit
+        end
     else
         local groundY = groundBelow(hrp, 15)
-        if groundY then yVel = math.clamp((groundY + 3 - hrp.Position.Y) * 8, -25, 25) end
+        if groundY then
+            local desiredY = groundY + 3
+            local diff = desiredY - hrp.Position.Y
+            yVel = math.clamp(diff * 8, -25, 25)
+        end
     end
     hrp.AssemblyLinearVelocity = Vector3.new(dir.X * speed, yVel, dir.Z * speed)
 end
@@ -392,64 +1233,166 @@ end
 task.spawn(function()
     while true do
         task.wait(0.1)
-        if not WalkRunning then if WalkPhase ~= "IDLE" then stopWalkMotion(); WalkPhase = "IDLE" end continue end
-        local hrp, hum = getHRP(), getHumanoid()
+        if not WalkRunning then
+            if WalkPhase ~= "IDLE" then stopWalkMotion(); WalkPhase = "IDLE" end
+            continue
+        end
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
         if not hrp or not hum or hum.Health <= 0 then task.wait(0.5); continue end
-        if not HomePos or not TargetPos then setStatus("Set P1 & P2 first!", WARN); continue end
+        if not HomePos or not TargetPos then
+            setStatus("Set Home & Target first!", WARN); continue
+        end
 
         if WalkPhase == "TO_TARGET" then
-            local dist = (Vector3.new(hrp.Position.X,0,hrp.Position.Z) - Vector3.new(TargetPos.X,0,TargetPos.Z)).Magnitude
-            if dist < 8 then stuckTimer = 0; climbing = false; task.wait(0.5); WalkPhase = "TO_HOME"
-            else moveToward(hrp, TargetPos, WalkSpeed); setStatus(string.format("→ P2 | %dm", math.floor(dist)), ACCENT2) end
+            local dist = (Vector3.new(hrp.Position.X,0,hrp.Position.Z)
+                - Vector3.new(TargetPos.X,0,TargetPos.Z)).Magnitude
+            if dist < 8 then
+                setStatus("Reached target! Going home...", SUCCESS)
+                walkStuckTimer = 0; walkClimbing = false
+                task.wait(0.5)
+                WalkPhase = "TO_HOME"
+            else
+                walkMoveToward(hrp, TargetPos, WalkSpeed)
+                setStatus(string.format("[Walk] → Target | %dm", math.floor(dist)), ACCENT2)
+            end
         elseif WalkPhase == "TO_HOME" then
-            local dist = (Vector3.new(hrp.Position.X,0,hrp.Position.Z) - Vector3.new(HomePos.X,0,HomePos.Z)).Magnitude
-            if dist < 8 then stuckTimer = 0; climbing = false; task.wait(0.5); WalkPhase = "TO_TARGET"
-            else moveToward(hrp, HomePos, WalkSpeed); setStatus(string.format("→ P1 | %dm", math.floor(dist)), SUCCESS) end
+            local dist = (Vector3.new(hrp.Position.X,0,hrp.Position.Z)
+                - Vector3.new(HomePos.X,0,HomePos.Z)).Magnitude
+            if dist < 8 then
+                setStatus("Reached home! Going to target...", SUCCESS)
+                walkStuckTimer = 0; walkClimbing = false
+                task.wait(0.5)
+                WalkPhase = "TO_TARGET"
+            else
+                walkMoveToward(hrp, HomePos, WalkSpeed)
+                setStatus(string.format("[Walk] → Home | %dm", math.floor(dist)), SUCCESS)
+            end
         end
     end
 end)
 
--- ========== HANDLERS ==========
-SetHomeBtn.MouseButton1Click:Connect(function() local hrp = getHRP(); if hrp then HomePos = hrp.Position; updatePointsLabel(); SetHomeBtn.BackgroundColor3 = SUCCESS end end)
-SetTargetBtn.MouseButton1Click:Connect(function() local hrp = getHRP(); if hrp then TargetPos = hrp.Position; updatePointsLabel(); SetTargetBtn.BackgroundColor3 = SUCCESS end end)
+-- ===================================================
+-- HANDLERS
+-- ===================================================
+SetP1Btn.MouseButton1Click:Connect(function()
+    local hrp = getHRP()
+    if hrp then FarmPoint1 = hrp.Position; renderFarmPoints() end
+end)
+SetP2Btn.MouseButton1Click:Connect(function()
+    local hrp = getHRP()
+    if hrp then FarmPoint2 = hrp.Position; renderFarmPoints() end
+end)
 
-WalkBtn.MouseButton1Click:Connect(function()
-    if not HomePos or not TargetPos then setStatus("Set P1 & P2 first!", WARN); return end
+FarmToggle.MouseButton1Click:Connect(function()
+    if not FarmPoint1 or not FarmPoint2 then
+        setStatus("Set Point 1 & 2 first!", DANGER)
+        switchTab("STATUS")
+        return
+    end
+    AutoFarmEnabled = not AutoFarmEnabled
+    renderFarmToggle()
+    if AutoFarmEnabled then
+        FarmPhase = "IDLE"
+        currentTarget = nil
+        setStatus("Farm started...", ACCENT2)
+    else
+        FarmPhase = "IDLE"
+        currentTarget = nil
+        setStatus("Farm stopped", SUBTEXT)
+    end
+end)
+
+SetHomeBtn.MouseButton1Click:Connect(function()
+    local hrp = getHRP()
+    if hrp then HomePos = hrp.Position; renderWalkPoints() end
+end)
+SetTargetBtn.MouseButton1Click:Connect(function()
+    local hrp = getHRP()
+    if hrp then TargetPos = hrp.Position; renderWalkPoints() end
+end)
+
+WalkToggle.MouseButton1Click:Connect(function()
+    if not HomePos or not TargetPos then
+        setStatus("Set Home & Target first!", DANGER)
+        switchTab("STATUS")
+        return
+    end
     WalkRunning = not WalkRunning
-    animToggle(WalkTrack, WalkKnob, WalkRunning)
+    renderWalkToggle()
     if WalkRunning then
-        lastPos = getHRP() and getHRP().Position or Vector3.new(); stuckTimer = 0; climbing = false
+        walkLastPos = getHRP() and getHRP().Position or Vector3.new()
+        walkStuckTimer = 0; walkClimbing = false
         local hrp = getHRP()
-        if hrp then WalkPhase = (hrp.Position - TargetPos).Magnitude < (hrp.Position - HomePos).Magnitude and "TO_HOME" or "TO_TARGET" else WalkPhase = "TO_TARGET" end
-    else WalkPhase = "IDLE"; stopWalkMotion(); setStatus("Walk stopped", SUBTEXT) end
+        if hrp then
+            local dH = (hrp.Position - HomePos).Magnitude
+            local dT = (hrp.Position - TargetPos).Magnitude
+            WalkPhase = dT < dH and "TO_HOME" or "TO_TARGET"
+        else
+            WalkPhase = "TO_TARGET"
+        end
+        setStatus("Walking...", ACCENT2)
+    else
+        WalkPhase = "IDLE"
+        stopWalkMotion()
+        setStatus("Walk stopped", SUBTEXT)
+    end
 end)
 
-HideBtn.MouseButton1Click:Connect(function()
+HideToggle.MouseButton1Click:Connect(function()
     HideActive = not HideActive
-    animToggle(HideTrack, HideKnob, HideActive)
-    if HideActive then applyHide(); startWatcher() else restoreAll(); if WatcherConn then WatcherConn:Disconnect(); WatcherConn = nil end setStatus("Visuals Restored", SUBTEXT) end
+    renderHideToggle()
+    if HideActive then applyHide() else restoreAll() end
 end)
 
-NoClipBtn.MouseButton1Click:Connect(function()
+NoClipToggle.MouseButton1Click:Connect(function()
     NoClipActive = not NoClipActive
-    animToggle(NoClipTrack, NoClipKnob, NoClipActive)
-    if NoClipActive then applyNoClip(); setStatus("No Clip ON", SUCCESS) else stopNoClip(); setStatus("No Clip OFF", SUBTEXT) end
+    renderNoClipToggle()
+    if NoClipActive then
+        applyNoClip()
+        setStatus("No Clip ON", SUCCESS)
+    else
+        stopNoClip()
+        setStatus("No Clip OFF", SUBTEXT)
+    end
 end)
 
--- ========== MINIMIZE / CLOSE ==========
+-- ===================================================
+-- TABS INIT
+-- ===================================================
+local FarmTabBtn = createTab("FARM", "⚔️ Farm", 1)
+local WalkTabBtn = createTab("WALK", "🚶 Walk", 2)
+local ExtraTabBtn = createTab("EXTRA", "🎨 Extras", 3)
+local StatusTabBtn = createTab("STATUS", "📊 Status", 4)
+
+FarmTabBtn.MouseButton1Click:Connect(function() switchTab("FARM") end)
+WalkTabBtn.MouseButton1Click:Connect(function() switchTab("WALK") end)
+ExtraTabBtn.MouseButton1Click:Connect(function() switchTab("EXTRA") end)
+StatusTabBtn.MouseButton1Click:Connect(function() switchTab("STATUS") end)
+
+-- ===================================================
+-- MINIMIZE / CLOSE
+-- ===================================================
 local minimized = false
 MinBtn.MouseButton1Click:Connect(function()
-    minimized = not minimized; Body.Visible = not minimized; StatusBar.Visible = not minimized
-    TweenService:Create(Main, TweenInfo.new(0.2, Enum.EasingStyle.Quad), { Size = minimized and UDim2.new(0, FULL_W, 0, 30) or UDim2.new(0, FULL_W, 0, FULL_H) }):Play()
+    minimized = not minimized
+    TabBar.Visible = not minimized
+    Content.Visible = not minimized
+    TweenService:Create(Main, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {
+        Size = minimized and UDim2.new(0,W,0,36) or UDim2.new(0,W,0,H)
+    }):Play()
     MinBtn.Text = minimized and "+" or "–"
 end)
 
 CloseBtn.MouseButton1Click:Connect(function()
-    WalkRunning = false; WalkPhase = "IDLE"; stopWalkMotion()
+    AutoFarmEnabled = false
+    WalkRunning = false
+    FarmPhase = "IDLE"
+    WalkPhase = "IDLE"
     if HideActive then restoreAll() end
-    if WatcherConn then WatcherConn:Disconnect() end
     if NoClipActive then stopNoClip() end
     Gui:Destroy()
 end)
 
-setStatus("Ready — Set P1 & P2", ACCENT2)
+setStatus("Ready — Set Point 1 & 2 for farm", ACCENT2)
