@@ -1,0 +1,455 @@
+-- =========================================================
+--  ALL-IN-ONE (MINIMALIST UI): Auto Walk A<->B + Hide + No Clip
+-- =========================================================
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- ================= STATE =================
+local WalkRunning = false
+local WalkSpeed = 120
+local HomePos = nil
+local TargetPos = nil
+local WalkPhase = "IDLE"
+local lastPos = Vector3.new()
+local stuckTimer = 0
+local STUCK_TIME = 1.5
+local CLIMB_DURATION = 1.0
+local climbing = false
+local climbEndTime = 0
+
+local HideActive = false
+local HideOpts = { Buildings = true, NPCs = true, Effects = true, GUI = true, Lighting = true }
+local SavedData = { parts = {}, decals = {}, guis = {}, effects = {}, lighting = {} }
+local WatcherConn = nil
+
+local NoClipActive = false
+local NoClipConn = nil
+
+-- ================= HELPERS =================
+local function getHRP()
+    local char = LocalPlayer.Character
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+local function getHumanoid()
+    local char = LocalPlayer.Character
+    return char and char:FindFirstChildOfClass("Humanoid")
+end
+local function isCharacterPart(obj)
+    local char = LocalPlayer.Character
+    if not char then return false end
+    return obj:IsDescendantOf(char)
+end
+local function isNPC(obj)
+    if not obj:IsA("Model") then return false end
+    if not obj:FindFirstChildOfClass("Humanoid") then return false end
+    if Players:GetPlayerFromCharacter(obj) then return false end
+    if obj == LocalPlayer.Character then return false end
+    return true
+end
+
+-- ================= UI HELPERS =================
+local function new(class, props, parent)
+    local o = Instance.new(class)
+    for k, v in pairs(props) do o[k] = v end
+    if parent then o.Parent = parent end
+    return o
+end
+local function corner(o, r) return new("UICorner", { CornerRadius = UDim.new(0, r) }, o) end
+local function stroke(o, c, t)
+    return new("UIStroke", { Color = c, Thickness = t, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, o)
+end
+
+local BG = Color3.fromRGB(12, 12, 18)
+local CARD = Color3.fromRGB(22, 22, 32)
+local CHIP = Color3.fromRGB(32, 32, 45)
+local ACCENT = Color3.fromRGB(139, 92, 246)
+local ACCENT2 = Color3.fromRGB(34, 211, 238)
+local TEXT = Color3.fromRGB(235, 235, 245)
+local SUBTEXT = Color3.fromRGB(140, 140, 160)
+local EDGE = Color3.fromRGB(50, 45, 75)
+local WARN = Color3.fromRGB(250, 180, 90)
+local SUCCESS = Color3.fromRGB(90, 250, 140)
+
+-- ================= GUI ROOT =================
+local function playerGui()
+    return LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui")
+end
+local parentGui = nil
+do
+    if type(gethui) == "function" then
+        local ok, res = pcall(gethui)
+        if ok and typeof(res) == "Instance" then parentGui = res end
+    end
+    if not parentGui then parentGui = playerGui() end
+end
+pcall(function()
+    local old = parentGui:FindFirstChild("AllInOneUI")
+    if old then old:Destroy() end
+end)
+
+local Gui = new("ScreenGui", { Name = "AllInOneUI", ResetOnSpawn = false, DisplayOrder = 999 })
+if type(syn) == "table" and syn.protect_gui then pcall(syn.protect_gui, Gui) end
+local okP = pcall(function() Gui.Parent = parentGui end)
+if not okP or Gui.Parent ~= parentGui then Gui.Parent = playerGui() end
+
+-- ================= MINIMALIST MAIN FRAME =================
+local FULL_W = 260
+local FULL_H = 370
+local Main = new("Frame", {
+    Size = UDim2.new(0, FULL_W, 0, FULL_H),
+    Position = UDim2.new(0.5, -FULL_W/2, 0.5, -FULL_H/2),
+    BackgroundColor3 = BG,
+    BorderSizePixel = 0,
+    ClipsDescendants = true,
+}, Gui)
+corner(Main, 10)
+stroke(Main, Color3.fromRGB(70,55,120), 1.5)
+
+-- HEADER
+local Header = new("Frame", { Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = Color3.fromRGB(255,255,255) }, Main)
+new("UIGradient", { Color = ColorSequence.new(ACCENT, ACCENT2), Rotation = 0 }, Header)
+
+new("TextLabel", { Size = UDim2.new(1, -70, 1, 0), Position = UDim2.new(0, 12, 0, 0), BackgroundTransparency = 1, Text = "⚡ ALL-IN-ONE (MINI)", TextColor3 = Color3.fromRGB(255,255,255), Font = Enum.Font.GothamBlack, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left }, Header)
+
+local MinBtn = new("TextButton", { Size = UDim2.new(0, 22, 0, 22), Position = UDim2.new(1, -52, 0.5, -11), BackgroundColor3 = Color3.fromRGB(0,0,0), BackgroundTransparency = 0.7, Text = "–", TextColor3 = Color3.fromRGB(255,255,255), Font = Enum.Font.GothamBold, TextSize = 14 }, Header); corner(MinBtn, 6)
+local CloseBtn = new("TextButton", { Size = UDim2.new(0, 22, 0, 22), Position = UDim2.new(1, -26, 0.5, -11), BackgroundColor3 = Color3.fromRGB(0,0,0), BackgroundTransparency = 0.7, Text = "✕", TextColor3 = Color3.fromRGB(255,255,255), Font = Enum.Font.GothamBold, TextSize = 11 }, Header); corner(CloseBtn, 6)
+
+-- DRAG LOGIC
+local dragging, dragStart, startPos
+Header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true; dragStart = input.Position; startPos = Main.Position
+        input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+    end
+end)
+UIS.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local d = input.Position - dragStart
+        Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+    end
+end)
+
+-- BODY & LAYOUT
+local Body = new("ScrollingFrame", { Size = UDim2.new(1, -16, 1, -64), Position = UDim2.new(0, 8, 0, 36), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0, CanvasSize = UDim2.new(0, 0, 0, 305) }, Main)
+new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, Body)
+
+local LayoutIdx = 0
+local function addTitle(text)
+    LayoutIdx = LayoutIdx + 1
+    new("TextLabel", { Size = UDim2.new(1, 0, 0, 12), BackgroundTransparency = 1, Text = text, TextColor3 = ACCENT2, Font = Enum.Font.GothamBold, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = LayoutIdx }, Body)
+end
+local function addToggle(text)
+    LayoutIdx = LayoutIdx + 1
+    local btn = new("TextButton", { Size = UDim2.new(1, 0, 0, 26), BackgroundColor3 = CARD, Text = "", LayoutOrder = LayoutIdx, AutoButtonColor = false }, Body); corner(btn, 6); stroke(btn, EDGE, 1)
+    new("TextLabel", { Size = UDim2.new(1, -40, 1, 0), Position = UDim2.new(0, 10, 0, 0), BackgroundTransparency = 1, Text = text, TextColor3 = TEXT, Font = Enum.Font.GothamBold, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left }, btn)
+    local track = new("Frame", { Size = UDim2.new(0, 32, 0, 16), Position = UDim2.new(1, -40, 0.5, -8), BackgroundColor3 = Color3.fromRGB(45,45,68) }, btn); corner(track, 8)
+    local knob = new("Frame", { Size = UDim2.new(0, 14, 0, 14), Position = UDim2.new(0, 1, 0.5, -7), BackgroundColor3 = Color3.fromRGB(255,255,255) }, track); corner(knob, 7)
+    return btn, track, knob
+end
+
+local function animToggle(track, knob, state)
+    local i = TweenInfo.new(0.2, Enum.EasingStyle.Quad)
+    TweenService:Create(knob, i, { Position = state and UDim2.new(1, -15, 0.5, -7) or UDim2.new(0, 1, 0.5, -7) }):Play()
+    TweenService:Create(track, i, { BackgroundColor3 = state and ACCENT or Color3.fromRGB(45,45,68) }):Play()
+end
+
+-- 1. WALK SECTION
+addTitle("🚶 AUTO WALK")
+local WalkBtn, WalkTrack, WalkKnob = addToggle("Enable Auto Walk")
+
+LayoutIdx = LayoutIdx + 1
+local PointRow = new("Frame", { Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, LayoutOrder = LayoutIdx }, Body)
+local SetHomeBtn = new("TextButton", { Size = UDim2.new(0.5, -3, 1, 0), Position = UDim2.new(0, 0, 0, 0), BackgroundColor3 = CHIP, Text = "🏠 Set P1", TextColor3 = TEXT, Font = Enum.Font.GothamBold, TextSize = 10 }, PointRow); corner(SetHomeBtn, 6); stroke(SetHomeBtn, EDGE, 1)
+local SetTargetBtn = new("TextButton", { Size = UDim2.new(0.5, -3, 1, 0), Position = UDim2.new(0.5, 3, 0, 0), BackgroundColor3 = CHIP, Text = "🎯 Set P2", TextColor3 = TEXT, Font = Enum.Font.GothamBold, TextSize = 10 }, PointRow); corner(SetTargetBtn, 6); stroke(SetTargetBtn, EDGE, 1)
+
+LayoutIdx = LayoutIdx + 1
+local PointStatus = new("TextLabel", { Size = UDim2.new(1, 0, 0, 12), BackgroundTransparency = 1, Text = "P1: - | P2: -", TextColor3 = SUBTEXT, Font = Enum.Font.Gotham, TextSize = 9, TextXAlignment = Enum.TextXAlignment.Center, LayoutOrder = LayoutIdx }, Body)
+
+LayoutIdx = LayoutIdx + 1
+local SpeedRow = new("Frame", { Size = UDim2.new(1, 0, 0, 24), BackgroundTransparency = 1, LayoutOrder = LayoutIdx }, Body)
+local speedBtns = {}
+for i, spd in ipairs({60, 120, 240, 500}) do
+    local b = new("TextButton", { Size = UDim2.new(0.25, -4, 1, 0), Position = UDim2.new((i-1)*0.25, 2, 0, 0), BackgroundColor3 = CHIP, Text = tostring(spd), TextColor3 = SUBTEXT, Font = Enum.Font.GothamBold, TextSize = 10 }, SpeedRow)
+    corner(b, 4); stroke(b, EDGE, 1); speedBtns[spd] = b
+    b.MouseButton1Click:Connect(function() 
+        WalkSpeed = spd
+        for s, btn in pairs(speedBtns) do
+            btn.BackgroundColor3 = (s == WalkSpeed) and ACCENT2 or CHIP
+            btn.TextColor3 = (s == WalkSpeed) and Color3.fromRGB(0,0,0) or SUBTEXT
+        end
+    end)
+end
+speedBtns[120].BackgroundColor3 = ACCENT2
+speedBtns[120].TextColor3 = Color3.fromRGB(0,0,0)
+
+local Space = new("Frame", { Size = UDim2.new(1, 0, 0, 4), BackgroundTransparency = 1, LayoutOrder = LayoutIdx + 1 }, Body); LayoutIdx = LayoutIdx + 1
+
+-- 2. HIDE SECTION
+addTitle("👻 HIDE VISUALS")
+local HideBtn, HideTrack, HideKnob = addToggle("Hide Everything")
+
+LayoutIdx = LayoutIdx + 1
+local HideOptsRow = new("Frame", { Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1, LayoutOrder = LayoutIdx }, Body)
+local hideKeys = { {"Buildings", "Bld"}, {"NPCs", "NPC"}, {"Effects", "FX"}, {"GUI", "GUI"} }
+for i, data in ipairs(hideKeys) do
+    local key, label = data[1], data[2]
+    local b = new("TextButton", { Size = UDim2.new(0.25, -4, 1, 0), Position = UDim2.new((i-1)*0.25, 2, 0, 0), BackgroundColor3 = ACCENT, Text = label, TextColor3 = Color3.fromRGB(255,255,255), Font = Enum.Font.GothamBold, TextSize = 10 }, HideOptsRow)
+    corner(b, 4)
+    b.MouseButton1Click:Connect(function()
+        HideOpts[key] = not HideOpts[key]
+        b.BackgroundColor3 = HideOpts[key] and ACCENT or CHIP
+        b.TextColor3 = HideOpts[key] and Color3.fromRGB(255,255,255) or SUBTEXT
+        if HideActive then pcall(restoreAll); pcall(applyHide) end
+    end)
+end
+
+local Space2 = new("Frame", { Size = UDim2.new(1, 0, 0, 4), BackgroundTransparency = 1, LayoutOrder = LayoutIdx + 1 }, Body); LayoutIdx = LayoutIdx + 1
+
+-- 3. NO CLIP SECTION
+addTitle("🌀 NO CLIP")
+local NoClipBtn, NoClipTrack, NoClipKnob = addToggle("Enable No Clip")
+
+-- STATUS BAR
+local StatusBar = new("Frame", { Size = UDim2.new(1, 0, 0, 24), Position = UDim2.new(0, 0, 1, -24), BackgroundColor3 = CARD, BorderSizePixel = 0 }, Main)
+local StatusLabel = new("TextLabel", { Size = UDim2.new(1, -16, 1, 0), Position = UDim2.new(0, 8, 0, 0), BackgroundTransparency = 1, Text = "● Ready", TextColor3 = SUBTEXT, Font = Enum.Font.Gotham, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Left }, StatusBar)
+
+local function setStatus(text, color)
+    StatusLabel.Text = "● " .. text
+    StatusLabel.TextColor3 = color or SUBTEXT
+end
+local function updatePointsLabel()
+    local p1 = HomePos and string.format("%d,%d", HomePos.X, HomePos.Z) or "-"
+    local p2 = TargetPos and string.format("%d,%d", TargetPos.X, TargetPos.Z) or "-"
+    PointStatus.Text = string.format("P1: %s  |  P2: %s", p1, p2)
+end
+
+-- ========== NO CLIP LOGIC ==========
+local function applyNoClip()
+    if NoClipConn then NoClipConn:Disconnect() end
+    NoClipConn = RunService.Stepped:Connect(function()
+        local char = LocalPlayer.Character
+        if char then
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then part.CanCollide = false end
+            end
+        end
+    end)
+end
+
+local function stopNoClip()
+    if NoClipConn then NoClipConn:Disconnect(); NoClipConn = nil end
+    local char = LocalPlayer.Character
+    if char then
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") and (part.Name == "Torso" or part.Name == "UpperTorso" or part.Name == "LowerTorso" or part.Name == "Head") then
+                part.CanCollide = true
+            end
+        end
+    end
+end
+
+-- ========== HIDE ALL LOGIC ==========
+function applyHide()
+    SavedData = { parts = {}, decals = {}, guis = {}, effects = {}, lighting = {} }
+    if HideOpts.Buildings then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("BasePart") and not isCharacterPart(obj) then
+                SavedData.parts[obj] = { Transparency = obj.Transparency, Reflectance = obj.Reflectance }
+                obj.Transparency = 1; obj.Reflectance = 0
+            end
+        end
+    end
+    if HideOpts.NPCs then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if isNPC(obj) then
+                for _, part in ipairs(obj:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        if not SavedData.parts[part] then SavedData.parts[part] = { Transparency = part.Transparency } end
+                        part.Transparency = 1
+                    end
+                    if part:IsA("BillboardGui") or part:IsA("SurfaceGui") then
+                        SavedData.guis[part] = { Enabled = part.Enabled }; part.Enabled = false
+                    end
+                end
+            end
+        end
+    end
+    if HideOpts.Effects then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if (obj:IsA("ParticleEmitter") or obj:IsA("Beam") or obj:IsA("Trail") or obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") or obj:IsA("Highlight")) and not isCharacterPart(obj) then
+                SavedData.effects[obj] = { Enabled = obj.Enabled }; obj.Enabled = false
+            end
+            if (obj:IsA("Decal") or obj:IsA("Texture")) and not isCharacterPart(obj) then
+                SavedData.decals[obj] = { Transparency = obj.Transparency }; obj.Transparency = 1
+            end
+        end
+    end
+    if HideOpts.GUI then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if (obj:IsA("BillboardGui") or obj:IsA("SurfaceGui")) and not isCharacterPart(obj) then
+                if not SavedData.guis[obj] then SavedData.guis[obj] = { Enabled = obj.Enabled } end
+                obj.Enabled = false
+            end
+        end
+        local pg = playerGui()
+        for _, gui in ipairs(pg:GetChildren()) do
+            if gui:IsA("ScreenGui") and gui ~= Gui and gui.Name ~= "AllInOneUI" and gui.Enabled then
+                SavedData.guis[gui] = { Enabled = true }; gui.Enabled = false
+            end
+        end
+    end
+    if HideOpts.Lighting then
+        SavedData.lighting = { Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient, Brightness = Lighting.Brightness, FogEnd = Lighting.FogEnd, FogStart = Lighting.FogStart, ClockTime = Lighting.ClockTime }
+        Lighting.Ambient = Color3.fromRGB(255,255,255); Lighting.OutdoorAmbient = Color3.fromRGB(255,255,255); Lighting.Brightness = 2; Lighting.FogEnd = 100000; Lighting.FogStart = 0; Lighting.ClockTime = 12
+        for _, obj in ipairs(Lighting:GetChildren()) do
+            if obj:IsA("Sky") then SavedData.lighting.Sky = obj; obj.Parent = nil end
+            if obj:IsA("Atmosphere") then SavedData.lighting.Atmosphere = { obj = obj, Density = obj.Density, Haze = obj.Haze }; obj.Density = 0; obj.Haze = 0 end
+            if obj:IsA("BloomEffect") or obj:IsA("BlurEffect") or obj:IsA("ColorCorrectionEffect") or obj:IsA("SunRaysEffect") then
+                SavedData.lighting[obj] = { Enabled = obj.Enabled }; obj.Enabled = false
+            end
+        end
+    end
+    setStatus("Visuals Hidden", SUCCESS)
+end
+
+function restoreAll()
+    for obj, data in pairs(SavedData.parts) do pcall(function() if obj and obj.Parent then obj.Transparency = data.Transparency or 0; if data.Reflectance then obj.Reflectance = data.Reflectance end end end) end
+    for obj, data in pairs(SavedData.decals) do pcall(function() if obj and obj.Parent then obj.Transparency = data.Transparency or 0 end end) end
+    for obj, data in pairs(SavedData.guis) do pcall(function() if obj and obj.Parent then obj.Enabled = data.Enabled or true end end) end
+    for obj, data in pairs(SavedData.effects) do pcall(function() if obj and obj.Parent then obj.Enabled = data.Enabled or true end end) end
+    if SavedData.lighting and HideOpts.Lighting then
+        local L = SavedData.lighting
+        pcall(function()
+            if L.Ambient then Lighting.Ambient = L.Ambient end; if L.OutdoorAmbient then Lighting.OutdoorAmbient = L.OutdoorAmbient end; if L.Brightness then Lighting.Brightness = L.Brightness end; if L.FogEnd then Lighting.FogEnd = L.FogEnd end; if L.FogStart then Lighting.FogStart = L.FogStart end; if L.ClockTime then Lighting.ClockTime = L.ClockTime end; if L.Sky then L.Sky.Parent = Lighting end
+            if L.Atmosphere then L.Atmosphere.obj.Density = L.Atmosphere.Density; L.Atmosphere.obj.Haze = L.Atmosphere.Haze end
+            for k, v in pairs(L) do if typeof(k) == "Instance" and v.Enabled ~= nil then pcall(function() k.Enabled = v.Enabled end) end end
+        end)
+    end
+    SavedData = { parts = {}, decals = {}, guis = {}, effects = {}, lighting = {} }
+end
+
+local function startWatcher()
+    if WatcherConn then WatcherConn:Disconnect() end
+    WatcherConn = workspace.DescendantAdded:Connect(function(obj)
+        if not HideActive then return end; task.wait(0.05)
+        if not HideActive or not obj or not obj.Parent then return end
+        if HideOpts.Buildings and obj:IsA("BasePart") and not isCharacterPart(obj) then SavedData.parts[obj] = { Transparency = obj.Transparency }; obj.Transparency = 1 end
+        if HideOpts.Effects and (obj:IsA("ParticleEmitter") or obj:IsA("Beam") or obj:IsA("Trail")) then SavedData.effects[obj] = { Enabled = obj.Enabled }; obj.Enabled = false end
+        if HideOpts.GUI and (obj:IsA("BillboardGui") or obj:IsA("SurfaceGui")) then SavedData.guis[obj] = { Enabled = obj.Enabled }; obj.Enabled = false end
+    end)
+end
+
+-- ========== AUTO WALK LOGIC ==========
+local function stopWalkMotion()
+    local hum = getHumanoid(); if hum then hum.WalkSpeed = 16 end
+    local hrp = getHRP(); if hrp then hrp.AssemblyLinearVelocity = Vector3.new(0,0,0) end
+    climbing = false; stuckTimer = 0
+end
+
+local function obstacleAhead(hrp, dir, dist)
+    local params = RaycastParams.new(); params.FilterType = Enum.RaycastFilterType.Exclude; params.FilterDescendantsInstances = { LocalPlayer.Character }; params.IgnoreWater = true
+    local ray = workspace:Raycast(hrp.Position, dir.Unit * dist, params)
+    if not ray or not ray.Instance or not ray.Instance.CanCollide or ray.Instance.Transparency >= 0.7 or ray.Instance.Size.Magnitude < 4 then return false end
+    return true
+end
+
+local function groundBelow(hrp, maxDist)
+    local params = RaycastParams.new(); params.FilterType = Enum.RaycastFilterType.Exclude; params.FilterDescendantsInstances = { LocalPlayer.Character }; params.IgnoreWater = true
+    local ray = workspace:Raycast(hrp.Position, Vector3.new(0,-maxDist,0), params)
+    return ray and ray.Position.Y or nil
+end
+
+local function moveToward(hrp, targetPos, speed)
+    local now = os.clock()
+    local horizontal = Vector3.new(targetPos.X - hrp.Position.X, 0, targetPos.Z - hrp.Position.Z)
+    if horizontal.Magnitude < 0.5 then hrp.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0); return end
+    local dir = horizontal.Unit
+    local moved = (hrp.Position - lastPos).Magnitude
+    if moved < 1.5 then stuckTimer = stuckTimer + 0.1 else stuckTimer = 0 end
+    lastPos = hrp.Position
+    if stuckTimer >= STUCK_TIME and not climbing then climbing = true; climbEndTime = now + CLIMB_DURATION end
+    if climbing and now >= climbEndTime then climbing = false; stuckTimer = 0 end
+
+    local probeDist = math.max(3, speed * 0.03)
+    local blocked = obstacleAhead(hrp, dir, probeDist)
+    local yVel = 0
+    if climbing then yVel = 40
+    elseif blocked then
+        yVel = 30; local rightDir = Vector3.new(-dir.Z, 0, dir.X)
+        if not obstacleAhead(hrp, rightDir, probeDist) then dir = (dir * 0.7 + rightDir * 0.3).Unit
+        elseif not obstacleAhead(hrp, -rightDir, probeDist) then dir = (dir * 0.7 - rightDir * 0.3).Unit end
+    else
+        local groundY = groundBelow(hrp, 15)
+        if groundY then yVel = math.clamp((groundY + 3 - hrp.Position.Y) * 8, -25, 25) end
+    end
+    hrp.AssemblyLinearVelocity = Vector3.new(dir.X * speed, yVel, dir.Z * speed)
+end
+
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if not WalkRunning then if WalkPhase ~= "IDLE" then stopWalkMotion(); WalkPhase = "IDLE" end continue end
+        local hrp, hum = getHRP(), getHumanoid()
+        if not hrp or not hum or hum.Health <= 0 then task.wait(0.5); continue end
+        if not HomePos or not TargetPos then setStatus("Set P1 & P2 first!", WARN); continue end
+
+        if WalkPhase == "TO_TARGET" then
+            local dist = (Vector3.new(hrp.Position.X,0,hrp.Position.Z) - Vector3.new(TargetPos.X,0,TargetPos.Z)).Magnitude
+            if dist < 8 then stuckTimer = 0; climbing = false; task.wait(0.5); WalkPhase = "TO_HOME"
+            else moveToward(hrp, TargetPos, WalkSpeed); setStatus(string.format("→ P2 | %dm", math.floor(dist)), ACCENT2) end
+        elseif WalkPhase == "TO_HOME" then
+            local dist = (Vector3.new(hrp.Position.X,0,hrp.Position.Z) - Vector3.new(HomePos.X,0,HomePos.Z)).Magnitude
+            if dist < 8 then stuckTimer = 0; climbing = false; task.wait(0.5); WalkPhase = "TO_TARGET"
+            else moveToward(hrp, HomePos, WalkSpeed); setStatus(string.format("→ P1 | %dm", math.floor(dist)), SUCCESS) end
+        end
+    end
+end)
+
+-- ========== HANDLERS ==========
+SetHomeBtn.MouseButton1Click:Connect(function() local hrp = getHRP(); if hrp then HomePos = hrp.Position; updatePointsLabel(); SetHomeBtn.BackgroundColor3 = SUCCESS end end)
+SetTargetBtn.MouseButton1Click:Connect(function() local hrp = getHRP(); if hrp then TargetPos = hrp.Position; updatePointsLabel(); SetTargetBtn.BackgroundColor3 = SUCCESS end end)
+
+WalkBtn.MouseButton1Click:Connect(function()
+    if not HomePos or not TargetPos then setStatus("Set P1 & P2 first!", WARN); return end
+    WalkRunning = not WalkRunning
+    animToggle(WalkTrack, WalkKnob, WalkRunning)
+    if WalkRunning then
+        lastPos = getHRP() and getHRP().Position or Vector3.new(); stuckTimer = 0; climbing = false
+        local hrp = getHRP()
+        if hrp then WalkPhase = (hrp.Position - TargetPos).Magnitude < (hrp.Position - HomePos).Magnitude and "TO_HOME" or "TO_TARGET" else WalkPhase = "TO_TARGET" end
+    else WalkPhase = "IDLE"; stopWalkMotion(); setStatus("Walk stopped", SUBTEXT) end
+end)
+
+HideBtn.MouseButton1Click:Connect(function()
+    HideActive = not HideActive
+    animToggle(HideTrack, HideKnob, HideActive)
+    if HideActive then applyHide(); startWatcher() else restoreAll(); if WatcherConn then WatcherConn:Disconnect(); WatcherConn = nil end setStatus("Visuals Restored", SUBTEXT) end
+end)
+
+NoClipBtn.MouseButton1Click:Connect(function()
+    NoClipActive = not NoClipActive
+    animToggle(NoClipTrack, NoClipKnob, NoClipActive)
+    if NoClipActive then applyNoClip(); setStatus("No Clip ON", SUCCESS) else stopNoClip(); setStatus("No Clip OFF", SUBTEXT) end
+end)
+
+-- ========== MINIMIZE / CLOSE ==========
+local minimized = false
+MinBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized; Body.Visible = not minimized; StatusBar.Visible = not minimized
+    TweenService:Create(Main, TweenInfo.new(0.2, Enum.EasingStyle.Quad), { Size = minimized and UDim2.new(0, FULL_W, 0, 30) or UDim2.new(0, FULL_W, 0, FULL_H) }):Play()
+    MinBtn.Text = minimized and "+" or "–"
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    WalkRunning = false; WalkPhase = "IDLE"; stopWalkMotion()
+    if HideActive then restoreAll() end
+    if WatcherConn then WatcherConn:Disconnect() end
+    if NoClipActive then stopNoClip() end
+    Gui:Destroy()
+end)
+
+setStatus("Ready — Set P1 & P2", ACCENT2)
