@@ -1,0 +1,277 @@
+-- Script ToolLock UI untuk Delta Executor
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local player = Players.LocalPlayer
+
+-- Hapus GUI lama kalau ada di CoreGui biar tidak dobel
+if CoreGui:FindFirstChild("ToolLockGui") then
+	CoreGui.ToolLockGui:Destroy()
+end
+
+-- ===== ROOT GUI =====
+local gui = Instance.new("ScreenGui")
+gui.Name = "ToolLockGui"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+-- Masukkan ke CoreGui agar aman di executor
+local success, err = pcall(function()
+	gui.Parent = CoreGui
+end)
+if not success then
+	gui.Parent = player:WaitForChild("PlayerGui")
+end
+
+-- ===== MAIN FRAME =====
+local main = Instance.new("Frame")
+main.Name = "MainFrame"
+main.Size = UDim2.new(0, 240, 0, 320)
+main.Position = UDim2.new(0, 20, 0.5, -160)
+main.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+main.BorderSizePixel = 0
+main.Active = true
+main.Draggable = true -- Ditambahkan agar UI bisa digeser-geser di HP/Delta
+main.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 12)
+corner.Parent = main
+
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(80, 80, 110)
+stroke.Thickness = 2
+stroke.Parent = main
+
+-- ===== TITLE =====
+local title = Instance.new("TextLabel")
+title.Name = "Title"
+title.Size = UDim2.new(1, 0, 0, 40)
+title.BackgroundTransparency = 1
+title.Text = "🔒 TOOL LOCK (DELTA)"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 18
+title.Parent = main
+
+-- ===== STATUS =====
+local status = Instance.new("TextLabel")
+status.Name = "StatusLabel"
+status.Size = UDim2.new(1, -20, 0, 28)
+status.Position = UDim2.new(0, 10, 0, 42)
+status.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+status.Text = "Unlocked"
+status.TextColor3 = Color3.fromRGB(255, 255, 255)
+status.Font = Enum.Font.Gotham
+status.TextSize = 14
+status.Parent = main
+
+local statusCorner = Instance.new("UICorner")
+statusCorner.CornerRadius = UDim.new(0, 6)
+statusCorner.Parent = status
+
+-- ===== ITEM DROPDOWN =====
+local dropdown = Instance.new("Frame")
+dropdown.Name = "ItemDropdown"
+dropdown.Size = UDim2.new(1, -20, 0, 36)
+dropdown.Position = UDim2.new(0, 10, 0, 78)
+dropdown.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+dropdown.Parent = main
+
+local dropCorner = Instance.new("UICorner")
+dropCorner.CornerRadius = UDim.new(0, 6)
+dropCorner.Parent = dropdown
+
+local dropBtn = Instance.new("TextButton")
+dropBtn.Name = "DropdownButton"
+dropBtn.Size = UDim2.new(1, 0, 1, 0)
+dropBtn.BackgroundTransparency = 1
+dropBtn.Text = "Pilih Item  ▼"
+dropBtn.TextColor3 = Color3.fromRGB(220, 220, 255)
+dropBtn.Font = Enum.Font.GothamMedium
+dropBtn.TextSize = 14
+dropBtn.Parent = dropdown
+
+-- List container (muncul saat dropdown diklik)
+local itemList = Instance.new("ScrollingFrame")
+itemList.Name = "ItemList"
+itemList.Size = UDim2.new(1, 0, 0, 140)
+itemList.Position = UDim2.new(0, 0, 1, 4)
+itemList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+itemList.BorderSizePixel = 0
+itemList.Visible = false
+itemList.ScrollBarThickness = 4
+itemList.CanvasSize = UDim2.new(0, 0, 0, 0)
+itemList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+itemList.Parent = dropdown
+
+local listCorner = Instance.new("UICorner")
+listCorner.CornerRadius = UDim.new(0, 6)
+listCorner.Parent = itemList
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 4)
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Parent = itemList
+
+-- ===== LOCK / UNLOCK BUTTONS =====
+local lockBtn = Instance.new("TextButton")
+lockBtn.Name = "LockButton"
+lockBtn.Size = UDim2.new(1, -20, 0, 40)
+lockBtn.Position = UDim2.new(0, 10, 1, -100)
+lockBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 90)
+lockBtn.Text = "🔒 LOCK"
+lockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+lockBtn.Font = Enum.Font.GothamBold
+lockBtn.TextSize = 16
+lockBtn.Parent = main
+
+local lockCorner = Instance.new("UICorner")
+lockCorner.CornerRadius = UDim.new(0, 8)
+lockCorner.Parent = lockBtn
+
+local unlockBtn = Instance.new("TextButton")
+unlockBtn.Name = "UnlockButton"
+unlockBtn.Size = UDim2.new(1, -20, 0, 40)
+unlockBtn.Position = UDim2.new(0, 10, 1, -52)
+unlockBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+unlockBtn.Text = "🔓 UNLOCK"
+unlockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+unlockBtn.Font = Enum.Font.GothamBold
+unlockBtn.TextSize = 16
+unlockBtn.Parent = main
+
+local unlockCorner = Instance.new("UICorner")
+unlockCorner.CornerRadius = UDim.new(0, 8)
+unlockCorner.Parent = unlockBtn
+
+-- ===== LOGIKA UI =====
+local selectedTool = nil
+local isLocked = false
+
+-- Refresh daftar item di backpack/character
+local function refreshList()
+	for _, child in ipairs(itemList:GetChildren()) do
+		if child:IsA("TextButton") then
+			child:Destroy()
+		end
+	end
+
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	local char = player.Character
+	local tools = {}
+
+	if backpack then
+		for _, t in ipairs(backpack:GetChildren()) do
+			if t:IsA("Tool") then
+				table.insert(tools, t)
+			end
+		end
+	end
+	if char then
+		for _, t in ipairs(char:GetChildren()) do
+			if t:IsA("Tool") then
+				table.insert(tools, t)
+			end
+		end
+	end
+
+	if #tools == 0 then
+		local empty = Instance.new("TextLabel")
+		empty.Size = UDim2.new(1, -8, 0, 32)
+		empty.BackgroundTransparency = 1
+		empty.Text = "Tidak ada tool"
+		empty.TextColor3 = Color3.fromRGB(150, 150, 170)
+		empty.Font = Enum.Font.Gotham
+		empty.TextSize = 13
+		empty.Parent = itemList
+		return
+	end
+
+	for i, tool in ipairs(tools) do
+		local btn = Instance.new("TextButton")
+		btn.Name = "Item_" .. tool.Name
+		btn.Size = UDim2.new(1, -8, 0, 32)
+		btn.Position = UDim2.new(0, 4, 0, (i - 1) * 36 + 4)
+		btn.BackgroundColor3 = Color3.fromRGB(60, 60, 85)
+		btn.Text = tool.Name
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.Font = Enum.Font.Gotham
+		btn.TextSize = 13
+		btn.Parent = itemList
+
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(0, 5)
+		c.Parent = btn
+
+		btn.MouseButton1Click:Connect(function()
+			selectedTool = tool
+			dropBtn.Text = "Pilih: " .. tool.Name .. "  ▼"
+			itemList.Visible = false
+		end)
+	end
+
+	itemList.CanvasSize = UDim2.new(0, 0, 0, #tools * 36 + 8)
+end
+
+-- Toggle dropdown
+dropBtn.MouseButton1Click:Connect(function()
+	itemList.Visible = not itemList.Visible
+	if itemList.Visible then
+		refreshList()
+	end
+end)
+
+-- Update status label
+local function updateStatus(locked, name)
+	isLocked = locked
+	if locked then
+		status.Text = "🔒 LOCKED: " .. (name or "?")
+		status.TextColor3 = Color3.fromRGB(0, 220, 120)
+	else
+		status.Text = "🔓 Unlocked"
+		status.TextColor3 = Color3.fromRGB(255, 255, 255)
+	end
+end
+
+-- ===== HUBUNG KE SERVER =====
+local lockEvent = ReplicatedStorage:FindFirstChild("ToolLockEvent")
+
+if not lockEvent then
+	status.Text = "⚠️ Warning: RemoteEvent tidak ada!"
+	status.TextColor3 = Color3.fromRGB(255, 100, 100)
+else
+	lockBtn.MouseButton1Click:Connect(function()
+		if isLocked then
+			status.Text = "Sudah terkunci!"
+			return
+		end
+		local toolName = selectedTool and selectedTool.Name or nil
+		if not toolName then
+			status.Text = "Pilih item dulu!"
+			status.TextColor3 = Color3.fromRGB(255, 180, 80)
+			return
+		end
+		lockEvent:FireServer("Lock", toolName)
+	end)
+
+	unlockBtn.MouseButton1Click:Connect(function()
+		if not isLocked then
+			status.Text = "Belum ada yang dikunci"
+			return
+		end
+		lockEvent:FireServer("Unlock")
+	end)
+
+	lockEvent.OnClientEvent:Connect(function(action, locked, toolName)
+		if action == "Status" then
+			updateStatus(locked, toolName)
+		end
+	end)
+
+	pcall(function()
+		lockEvent:FireServer("CheckStatus")
+	end)
+end
+
+updateStatus(false, nil)
