@@ -1,257 +1,117 @@
--- Tool Lock Script untuk Delta Executor (Client-Side Only)
+-- Tool Lock Simple - Client Side (Delta Executor)
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
+local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
 -- Hapus GUI lama jika ada
-if CoreGui:FindFirstChild("ToolLockGui") then
-	CoreGui.ToolLockGui:Destroy()
+if CoreGui:FindFirstChild("SimpleToolLock") then
+	CoreGui.SimpleToolLock:Destroy()
 end
 
--- ===== ROOT GUI =====
+-- ===== BUAT UI SIMPEL =====
 local gui = Instance.new("ScreenGui")
-gui.Name = "ToolLockGui"
+gui.Name = "SimpleToolLock"
 gui.ResetOnSpawn = false
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.Parent = CoreGui
 
-local success, err = pcall(function()
-	gui.Parent = CoreGui
-end)
-if not success then
-	gui.Parent = player:WaitForChild("PlayerGui")
-end
-
--- ===== MAIN FRAME =====
-local main = Instance.new("Frame")
-main.Name = "MainFrame"
-main.Size = UDim2.new(0, 240, 0, 320)
-main.Position = UDim2.new(0, 20, 0.5, -160)
-main.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-main.BorderSizePixel = 0
-main.Active = true
-main.Draggable = true -- Bisa digeser-geser dengan sentuhan HP
-main.Parent = gui
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 180, 0, 110)
+frame.Position = UDim2.new(0, 30, 0.5, -55)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true -- Bisa digeser pakai sentuhan layar
+frame.Parent = gui
 
 local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 12)
-corner.Parent = main
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = frame
 
-local stroke = Instance.new("UIStroke")
-stroke.Color = Color3.fromRGB(80, 80, 110)
-stroke.Thickness = 2
-stroke.Parent = main
+-- Judul / Status Teks
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, -16, 0, 32)
+statusLabel.Position = UDim2.new(0, 8, 0, 8)
+statusLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+statusLabel.Text = "Status: Unlocked"
+statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+statusLabel.Font = Enum.Font.GothamBold
+statusLabel.TextSize = 12
+statusLabel.Parent = frame
 
--- ===== TITLE =====
-local title = Instance.new("TextLabel")
-title.Name = "Title"
-title.Size = UDim2.new(1, 0, 0, 40)
-title.BackgroundTransparency = 1
-title.Text = "🔒 TOOL LOCK (DELTA)"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 18
-title.Parent = main
-
--- ===== STATUS =====
-local status = Instance.new("TextLabel")
-status.Name = "StatusLabel"
-status.Size = UDim2.new(1, -20, 0, 28)
-status.Position = UDim2.new(0, 10, 0, 42)
-status.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-status.Text = "Unlocked"
-status.TextColor3 = Color3.fromRGB(255, 255, 255)
-status.Font = Enum.Font.Gotham
-status.TextSize = 14
-status.Parent = main
-
-local statusCorner = Instance.new("UICorner")
-statusCorner.CornerRadius = UDim.new(0, 6)
-statusCorner.Parent = status
-
--- ===== ITEM DROPDOWN =====
-local dropdown = Instance.new("Frame")
-dropdown.Name = "ItemDropdown"
-dropdown.Size = UDim2.new(1, -20, 0, 36)
-dropdown.Position = UDim2.new(0, 10, 0, 78)
-dropdown.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-dropdown.Parent = main
-
-local dropCorner = Instance.new("UICorner")
-dropCorner.CornerRadius = UDim.new(0, 6)
-dropCorner.Parent = dropdown
-
-local dropBtn = Instance.new("TextButton")
-dropBtn.Name = "DropdownButton"
-dropBtn.Size = UDim2.new(1, 0, 1, 0)
-dropBtn.BackgroundTransparency = 1
-dropBtn.Text = "Pilih Item  ▼"
-dropBtn.TextColor3 = Color3.fromRGB(220, 220, 255)
-dropBtn.Font = Enum.Font.GothamMedium
-dropBtn.TextSize = 14
-dropBtn.Parent = dropdown
-
--- List container
-local itemList = Instance.new("ScrollingFrame")
-itemList.Name = "ItemList"
-itemList.Size = UDim2.new(1, 0, 0, 140)
-itemList.Position = UDim2.new(0, 0, 1, 4)
-itemList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-itemList.BorderSizePixel = 0
-itemList.Visible = false
-itemList.ScrollBarThickness = 4
-itemList.CanvasSize = UDim2.new(0, 0, 0, 0)
-itemList.AutomaticCanvasSize = Enum.AutomaticSize.Y
-itemList.Parent = dropdown
-
-local listCorner = Instance.new("UICorner")
-listCorner.CornerRadius = UDim.new(0, 6)
-listCorner.Parent = itemList
-
-local listLayout = Instance.new("UIListLayout")
-listLayout.Padding = UDim.new(0, 4)
-listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-listLayout.Parent = itemList
-
--- ===== LOCK / UNLOCK BUTTONS =====
-local lockBtn = Instance.new("TextButton")
-lockBtn.Name = "LockButton"
-lockBtn.Size = UDim2.new(1, -20, 0, 40)
-lockBtn.Position = UDim2.new(0, 10, 1, -100)
-lockBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 90)
-lockBtn.Text = "🔒 LOCK"
-lockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-lockBtn.Font = Enum.Font.GothamBold
-lockBtn.TextSize = 16
-lockBtn.Parent = main
-
-local lockCorner = Instance.new("UICorner")
-lockCorner.CornerRadius = UDim.new(0, 8)
-lockCorner.Parent = lockBtn
-
-local unlockBtn = Instance.new("TextButton")
-unlockBtn.Name = "UnlockButton"
-unlockBtn.Size = UDim2.new(1, -20, 0, 40)
-unlockBtn.Position = UDim2.new(0, 10, 1, -52)
-unlockBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
-unlockBtn.Text = "🔓 UNLOCK"
-unlockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-unlockBtn.Font = Enum.Font.GothamBold
-unlockBtn.TextSize = 16
-unlockBtn.Parent = main
-
-local unlockCorner = Instance.new("UICorner")
-unlockCorner.CornerRadius = UDim.new(0, 8)
-unlockCorner.Parent = unlockBtn
-
--- ===== LOGIKA PENGUNCIAN (CLIENT-SIDE) =====
-local selectedToolName = nil
-local isLocked = false
-local lockConnection = nil
-
-local function updateStatus(locked, name)
-	isLocked = locked
-	if locked then
-		status.Text = "🔒 LOCKED: " .. (name or "?")
-		status.TextColor3 = Color3.fromRGB(0, 220, 120)
-	else
-		status.Text = "🔓 Unlocked"
-		status.TextColor3 = Color3.fromRGB(255, 255, 255)
-	end
-end
-
--- Refresh daftar item
-local function refreshList()
-	for _, child in ipairs(itemList:GetChildren()) do
-		if child:IsA("TextButton") then
-			child:Destroy()
-		end
-	end
-
-	local backpack = player:FindFirstChildOfClass("Backpack")
-	local char = player.Character
-	local tools = {}
-
-	if backpack then
-		for _, t in ipairs(backpack:GetChildren()) do
-			if t:IsA("Tool") then table.insert(tools, t) end
-		end
-	end
-	if char then
-		for _, t in ipairs(char:GetChildren()) do
-			if t:IsA("Tool") then table.insert(tools, t) end
-		end
-	end
-
-	if #tools == 0 then
-		local empty = Instance.new("TextLabel")
-		empty.Size = UDim2.new(1, -8, 0, 32)
-		empty.BackgroundTransparency = 1
-		empty.Text = "Tidak ada tool"
-		empty.TextColor3 = Color3.fromRGB(150, 150, 170)
-		empty.Font = Enum.Font.Gotham
-		empty.TextSize = 13
-		empty.Parent = itemList
-		return
-	end
-
-	for i, tool in ipairs(tools) do
-		local btn = Instance.new("TextButton")
-		btn.Name = "Item_" .. tool.Name
-		btn.Size = UDim2.new(1, -8, 0, 32)
-		btn.Position = UDim2.new(0, 4, 0, (i - 1) * 36 + 4)
-		btn.BackgroundColor3 = Color3.fromRGB(60, 60, 85)
-		btn.Text = tool.Name
-		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-		btn.Font = Enum.Font.Gotham
-		btn.TextSize = 13
-		btn.Parent = itemList
-
-		local c = Instance.new("UICorner")
-		c.CornerRadius = UDim.new(0, 5)
-		c.Parent = btn
-
-		btn.MouseButton1Click:Connect(function()
-			selectedToolName = tool.Name
-			dropBtn.Text = "Pilih: " .. tool.Name .. "  ▼"
-			itemList.Visible = false
-		end)
-	end
-
-	itemList.CanvasSize = UDim2.new(0, 0, 0, #tools * 36 + 8)
-end
-
-dropBtn.MouseButton1Click:Connect(function()
-	itemList.Visible = not itemList.Visible
-	if itemList.Visible then
-		refreshList()
-	end
-end)
+local labelCorner = Instance.new("UICorner")
+labelCorner.CornerRadius = UDim.new(0, 6)
+labelCorner.Parent = statusLabel
 
 -- Tombol Lock
+local lockBtn = Instance.new("TextButton")
+lockBtn.Size = UDim2.new(0, 78, 0, 32)
+lockBtn.Position = UDim2.new(0, 8, 0, 48)
+lockBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 90)
+lockBtn.Text = "LOCK"
+lockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+lockBtn.Font = Enum.Font.GothamBold
+lockBtn.TextSize = 13
+lockBtn.Parent = frame
+
+local lockCorner = Instance.new("UICorner")
+lockCorner.CornerRadius = UDim.new(0, 6)
+lockCorner.Parent = lockBtn
+
+-- Tombol Unlock
+local unlockBtn = Instance.new("TextButton")
+unlockBtn.Size = UDim2.new(0, 78, 0, 32)
+unlockBtn.Position = UDim2.new(1, -86, 0, 48)
+unlockBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+unlockBtn.Text = "UNLOCK"
+unlockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+unlockBtn.Font = Enum.Font.GothamBold
+unlockBtn.TextSize = 13
+unlockBtn.Parent = frame
+
+local unlockCorner = Instance.new("UICorner")
+unlockCorner.CornerRadius = UDim.new(0, 6)
+unlockCorner.Parent = unlockBtn
+
+-- ===== LOGIKA UTAMA =====
+local lockedToolName = nil
+local isLocked = false
+local loopConnection = nil
+
+-- Tombol Lock diklik
 lockBtn.MouseButton1Click:Connect(function()
-	if not selectedToolName then
-		status.Text = "Pilih item dulu!"
-		status.TextColor3 = Color3.fromRGB(255, 180, 80)
+	local char = player.Character
+	if not char then return end
+	
+	-- Cari tool yang sedang dipegang di tangan saat tombol diklik
+	local currentTool = char:FindFirstChildOfClass("Tool")
+	if not currentTool then
+		statusLabel.Text = "Pegang item dulu!"
+		statusLabel.TextColor3 = Color3.fromRGB(255, 180, 80)
 		return
 	end
 	
+	lockedToolName = currentTool.Name
 	isLocked = true
-	updateStatus(true, selectedToolName)
+	statusLabel.Text = "Locked: " .. lockedToolName
+	statusLabel.TextColor3 = Color3.fromRGB(0, 255, 120)
 	
-	-- Loop pengaman lokal (memaksa equip tool terus jika tidak di tangan)
-	if lockConnection then lockConnection:Disconnect() end
-	lockConnection = game:GetService("RunService").Stepped:Connect(function()
-		if not isLocked or not selectedToolName then return end
-		local char = player.Character
-		if not char then return end
-		local humanoid = char:FindFirstChildOfClass("Humanoid")
+	-- Mulai pengaman otomatis (memaksa item tetap di tangan)
+	if loopConnection then loopConnection:Disconnect() end
+	loopConnection = RunService.Stepped:Connect(function()
+		if not isLocked or not lockedToolName then return end
+		
+		local character = player.Character
+		if not character then return end
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		if not humanoid then return end
 		
-		local currentTool = char:FindFirstChild(selectedToolName)
-		if not currentTool then
+		-- Jika tangan kosong / memegang item lain, paksa ambil kembali item yang dikunci
+		local inHand = character:FindFirstChild(lockedToolName)
+		if not inHand then
 			local backpack = player:FindFirstChildOfClass("Backpack")
 			if backpack then
-				local tool = backpack:FindFirstChild(selectedToolName)
+				local tool = backpack:FindFirstChild(lockedToolName)
 				if tool and tool:IsA("Tool") then
 					pcall(function()
 						humanoid:EquipTool(tool)
@@ -262,14 +122,14 @@ lockBtn.MouseButton1Click:Connect(function()
 	end)
 end)
 
--- Tombol Unlock
+-- Tombol Unlock diklik
 unlockBtn.MouseButton1Click:Connect(function()
 	isLocked = false
-	if lockConnection then
-		lockConnection:Disconnect()
-		lockConnection = nil
+	lockedToolName = nil
+	if loopConnection then
+		loopConnection:Disconnect()
+		loopConnection = nil
 	end
-	updateStatus(false, nil)
+	statusLabel.Text = "Status: Unlocked"
+	statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 end)
-
-updateStatus(false, nil)
