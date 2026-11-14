@@ -1,4 +1,4 @@
--- Tool Lock Simple - Client Side (Delta Executor)
+-- Tool Lock Simple dengan Auto-Relock (Delta Executor)
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local RunService = game:GetService("RunService")
@@ -21,7 +21,7 @@ frame.Position = UDim2.new(0, 30, 0.5, -55)
 frame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 frame.BorderSizePixel = 0
 frame.Active = true
-frame.Draggable = true -- Bisa digeser pakai sentuhan layar
+frame.Draggable = true
 frame.Parent = gui
 
 local corner = Instance.new("UICorner")
@@ -77,13 +77,12 @@ unlockCorner.Parent = unlockBtn
 local lockedToolName = nil
 local isLocked = false
 local loopConnection = nil
+local isChecking = false
 
--- Tombol Lock diklik
 lockBtn.MouseButton1Click:Connect(function()
 	local char = player.Character
 	if not char then return end
 	
-	-- Cari tool yang sedang dipegang di tangan saat tombol diklik
 	local currentTool = char:FindFirstChildOfClass("Tool")
 	if not currentTool then
 		statusLabel.Text = "Pegang item dulu!"
@@ -96,8 +95,9 @@ lockBtn.MouseButton1Click:Connect(function()
 	statusLabel.Text = "Locked: " .. lockedToolName
 	statusLabel.TextColor3 = Color3.fromRGB(0, 255, 120)
 	
-	-- Mulai pengaman otomatis (memaksa item tetap di tangan)
 	if loopConnection then loopConnection:Disconnect() end
+	
+	-- Cek terus setiap frame secara halus
 	loopConnection = RunService.Stepped:Connect(function()
 		if not isLocked or not lockedToolName then return end
 		
@@ -106,26 +106,48 @@ lockBtn.MouseButton1Click:Connect(function()
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		if not humanoid then return end
 		
-		-- Jika tangan kosong / memegang item lain, paksa ambil kembali item yang dikunci
 		local inHand = character:FindFirstChild(lockedToolName)
-		if not inHand then
-			local backpack = player:FindFirstChildOfClass("Backpack")
-			if backpack then
-				local tool = backpack:FindFirstChild(lockedToolName)
-				if tool and tool:IsA("Tool") then
-					pcall(function()
-						humanoid:EquipTool(tool)
-					end)
+		
+		-- Jika item terlepas dari tangan dan kita sedang tidak dalam masa tunggu (delay)
+		if not inHand and not isChecking then
+			isChecking = true
+			
+			-- Delay sekitar 1 detik sebelum memutuskan untuk nge-lock lagi
+			task.delay(1, function()
+				if not isLocked then 
+					isChecking = false
+					return 
 				end
-			end
+				
+				local latestChar = player.Character
+				if latestChar then
+					local latestHumanoid = latestChar:FindFirstChildOfClass("Humanoid")
+					local checkHand = latestChar:FindFirstChild(lockedToolName)
+					
+					-- Jika setelah 1 detik masih belum di tangan, cari di backpack lalu equip lagi
+					if not checkHand and latestHumanoid then
+						local backpack = player:FindFirstChildOfClass("Backpack")
+						if backpack then
+							local tool = backpack:FindFirstChild(lockedToolName)
+							if tool and tool:IsA("Tool") then
+								pcall(function()
+									latestHumanoid:EquipTool(tool)
+								end)
+							end
+						end
+					end
+				end
+				
+				isChecking = false
+			end)
 		end
 	end)
 end)
 
--- Tombol Unlock diklik
 unlockBtn.MouseButton1Click:Connect(function()
 	isLocked = false
 	lockedToolName = nil
+	isChecking = false
 	if loopConnection then
 		loopConnection:Disconnect()
 		loopConnection = nil
