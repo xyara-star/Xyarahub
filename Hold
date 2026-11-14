@@ -1,8 +1,8 @@
 --[[
-    Tool Lock Pro v3
-    - Toggle ON/OFF (satu tombol)
-    - Force hold agresif (RenderStepped loop)
-    - Listener Unequipped + ChildRemoved
+    Tool Lock Pro v4
+    - Toggle ON/OFF
+    - Delay sebelum re-equip (biar bisa sell)
+    - Auto-unlock kalau tool hilang/terjual
     - Destroy UI = matikan semua fitur
 ]]
 
@@ -11,15 +11,20 @@ local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
 local player = Players.LocalPlayer
 
+-- ===== KONFIGURASI =====
+local RE_EQUIP_DELAY = 0.8   -- detik: jeda sebelum item dipegang lagi
+local HOLD_CHECK_INTERVAL = 0.15 -- detik: seberapa sering loop cek (jangan 0 biar bisa sell)
+
 -- ===== HAPUS GUI LAMA =====
 local old = CoreGui:FindFirstChild("SimpleToolLock")
 if old then old:Destroy() end
 
--- ===== STATE GLOBAL =====
+-- ===== STATE =====
 local isLocked = false
 local lockedTool = nil
 local conns = {}
 local isDestroyed = false
+local isReEquipping = false
 
 -- ===== HELPER =====
 local function clearConns()
@@ -41,8 +46,8 @@ gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = CoreGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 210, 0, 160)
-frame.Position = UDim2.new(0, 30, 0.5, -80)
+frame.Size = UDim2.new(0, 220, 0, 190)
+frame.Position = UDim2.new(0, 30, 0.5, -95)
 frame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 frame.BorderSizePixel = 0
 frame.Active = true
@@ -74,7 +79,7 @@ local labelCorner = Instance.new("UICorner")
 labelCorner.CornerRadius = UDim.new(0, 6)
 labelCorner.Parent = statusLabel
 
--- Tombol Toggle ON/OFF
+-- Tombol Toggle
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Size = UDim2.new(1, -16, 0, 40)
 toggleBtn.Position = UDim2.new(0, 8, 0, 50)
@@ -92,7 +97,7 @@ toggleCorner.Parent = toggleBtn
 -- Tombol Destroy
 local destroyBtn = Instance.new("TextButton")
 destroyBtn.Size = UDim2.new(1, -16, 0, 30)
-destroyBtn.Position = UDim2.new(0, 8, 0, 120)
+destroyBtn.Position = UDim2.new(0, 8, 0, 150)
 destroyBtn.BackgroundColor3 = Color3.fromRGB(120, 30, 30)
 destroyBtn.Text = "✖ DESTROY UI"
 destroyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -111,19 +116,45 @@ local function setStatus(text, color)
     statusLabel.TextColor3 = color or Color3.fromRGB(255, 255, 255)
 end
 
--- Equip paksa (tanpa delay)
-local function forceEquip()
+-- Reset lock kalau tool sudah hilang
+local function autoUnlock(reason)
+    isLocked = false
+    lockedTool = nil
+    isReEquipping = false
+    clearConns()
+    toggleBtn.Text = "LOCK (OFF)"
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 90)
+    setStatus(reason or "Item hilang, unlock", Color3.fromRGB(255, 180, 80))
+end
+
+-- Equip ulang dengan delay configurable
+local function scheduleForceEquip()
     if not isLocked or not lockedTool then return end
-    if not lockedTool.Parent then return end -- tool sudah hilang
+    if isReEquipping then return end -- sudah ada timer berjalan
 
-    local char = player.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
+    isReEquipping = true
 
-    if lockedTool.Parent == char then return end -- sudah di tangan
-    pcall(function()
-        hum:EquipTool(lockedTool)
+    task.delay(RE_EQUIP_DELAY, function()
+        isReEquipping = false
+        if isDestroyed or not isLocked or not lockedTool then return end
+
+        -- Cek dulu: tool masih ada di game?
+        if not lockedTool.Parent then
+            autoUnlock("Item terjual/hilang → unlock")
+            return
+        end
+
+        local char = player.Character
+        if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum then return end
+
+        -- Sudah di tangan? tidak perlu apa-apa
+        if lockedTool.Parent == char then return end
+
+        pcall(function()
+            hum:EquipTool(lockedTool)
+        end)
     end)
 end
 
@@ -131,22 +162,20 @@ end
 local function hookTool(tool)
     if not tool then return end
 
-    -- Event utama: begitu dilepas, langsung re-equip
+    -- Event utama
     addConn(tool.Unequipped:Connect(function()
         if isLocked and lockedTool == tool then
-            task.defer(forceEquip)
+            scheduleForceEquip()
         end
     end))
 
-    -- Tool hilang/dijual/hancur
+    -- Tool hilang dari game (terjual/hancur)
     addConn(tool.AncestryChanged:Connect(function()
         if isLocked and lockedTool == tool and not tool.Parent then
-            isLocked = false
-            lockedTool = nil
-            clearConns()
-            setStatus("Item hilang, unlock", Color3.fromRGB(255, 180, 80))
-            toggleBtn.Text = "LOCK (OFF)"
-            toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 90)
+            task.wait(0.1) -- beri waktu 1 frame untuk konfirmasi
+            if isLocked and lockedTool == tool and not tool.Parent then
+                autoUnlock("Item terjual/hilang → unlock")
+            end
         end
     end))
 end
@@ -156,30 +185,41 @@ local function hookCharacter(char)
     if not char then return end
     addConn(char.ChildRemoved:Connect(function(child)
         if isLocked and child == lockedTool then
-            task.defer(forceEquip)
+            scheduleForceEquip()
         end
     end))
 end
 
--- Loop agresif: tiap frame cek apakah tool masih di tangan
-local holdConn = RunService.RenderStepped:Connect(function()
+-- Loop periodik (BUKAN 0 delay, biar masih bisa sell)
+local holdConn = RunService.Heartbeat:Connect(function()
     if isDestroyed then return end
     if not isLocked or not lockedTool then return end
-    if not lockedTool.Parent then return end
+    if isReEquipping then return end
+
+    -- Kalau tool sudah tidak ada di game → unlock
+    if not lockedTool.Parent then
+        autoUnlock("Item terjual/hilang → unlock")
+        return
+    end
 
     local char = player.Character
     if not char then return end
+
+    -- Kalau tool di backpack (bukan di tangan), jadwalkan re-equip
     if lockedTool.Parent ~= char then
-        forceEquip()
+        local backpack = player:FindFirstChildOfClass("Backpack")
+        if backpack and lockedTool.Parent == backpack then
+            scheduleForceEquip()
+        end
     end
 end)
 
--- ===== TOGGLE ON/OFF =====
+-- ===== TOGGLE =====
 toggleBtn.MouseButton1Click:Connect(function()
     if isDestroyed then return end
 
     if not isLocked then
-        -- === NYALAKAN ===
+        -- NYALAKAN
         local char = player.Character
         if not char then return end
 
@@ -192,6 +232,7 @@ toggleBtn.MouseButton1Click:Connect(function()
         clearConns()
         isLocked = true
         lockedTool = tool
+        isReEquipping = false
 
         hookTool(tool)
         hookCharacter(char)
@@ -199,12 +240,11 @@ toggleBtn.MouseButton1Click:Connect(function()
         toggleBtn.Text = "UNLOCK (ON)"
         toggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
         setStatus("Locked: " .. tool.Name, Color3.fromRGB(0, 220, 120))
-
-        forceEquip()
     else
-        -- === MATIKAN ===
+        -- MATIKAN
         isLocked = false
         lockedTool = nil
+        isReEquipping = false
         clearConns()
 
         toggleBtn.Text = "LOCK (OFF)"
@@ -213,15 +253,16 @@ toggleBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- ===== DESTROY UI =====
+-- ===== DESTROY =====
 destroyBtn.MouseButton1Click:Connect(function()
     isDestroyed = true
     isLocked = false
     lockedTool = nil
+    isReEquipping = false
     clearConns()
     if holdConn then holdConn:Disconnect() end
     pcall(function() gui:Destroy() end)
-    print("[Tool Lock Pro v3] Destroyed")
+    print("[Tool Lock Pro v4] Destroyed")
 end)
 
 -- ===== RESPAWN =====
@@ -231,12 +272,9 @@ player.CharacterAdded:Connect(function(newChar)
 
     local backpack = player:FindFirstChildOfClass("Backpack")
     if backpack and lockedTool.Parent == backpack then
-        local hum = newChar:FindFirstChildOfClass("Humanoid")
-        if hum then
-            pcall(function() hum:EquipTool(lockedTool) end)
-        end
+        scheduleForceEquip()
     end
     hookCharacter(newChar)
 end)
 
-print("[Tool Lock Pro v3] Loaded")
+print("[Tool Lock Pro v4] Loaded")
