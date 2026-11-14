@@ -1,10 +1,9 @@
--- Script ToolLock UI untuk Delta Executor
+-- Tool Lock Script untuk Delta Executor (Client-Side Only)
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 
--- Hapus GUI lama kalau ada di CoreGui biar tidak dobel
+-- Hapus GUI lama jika ada
 if CoreGui:FindFirstChild("ToolLockGui") then
 	CoreGui.ToolLockGui:Destroy()
 end
@@ -15,7 +14,6 @@ gui.Name = "ToolLockGui"
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- Masukkan ke CoreGui agar aman di executor
 local success, err = pcall(function()
 	gui.Parent = CoreGui
 end)
@@ -31,7 +29,7 @@ main.Position = UDim2.new(0, 20, 0.5, -160)
 main.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
 main.BorderSizePixel = 0
 main.Active = true
-main.Draggable = true -- Ditambahkan agar UI bisa digeser-geser di HP/Delta
+main.Draggable = true -- Bisa digeser-geser dengan sentuhan HP
 main.Parent = gui
 
 local corner = Instance.new("UICorner")
@@ -92,7 +90,7 @@ dropBtn.Font = Enum.Font.GothamMedium
 dropBtn.TextSize = 14
 dropBtn.Parent = dropdown
 
--- List container (muncul saat dropdown diklik)
+-- List container
 local itemList = Instance.new("ScrollingFrame")
 itemList.Name = "ItemList"
 itemList.Size = UDim2.new(1, 0, 0, 140)
@@ -145,11 +143,23 @@ local unlockCorner = Instance.new("UICorner")
 unlockCorner.CornerRadius = UDim.new(0, 8)
 unlockCorner.Parent = unlockBtn
 
--- ===== LOGIKA UI =====
-local selectedTool = nil
+-- ===== LOGIKA PENGUNCIAN (CLIENT-SIDE) =====
+local selectedToolName = nil
 local isLocked = false
+local lockConnection = nil
 
--- Refresh daftar item di backpack/character
+local function updateStatus(locked, name)
+	isLocked = locked
+	if locked then
+		status.Text = "🔒 LOCKED: " .. (name or "?")
+		status.TextColor3 = Color3.fromRGB(0, 220, 120)
+	else
+		status.Text = "🔓 Unlocked"
+		status.TextColor3 = Color3.fromRGB(255, 255, 255)
+	end
+end
+
+-- Refresh daftar item
 local function refreshList()
 	for _, child in ipairs(itemList:GetChildren()) do
 		if child:IsA("TextButton") then
@@ -163,16 +173,12 @@ local function refreshList()
 
 	if backpack then
 		for _, t in ipairs(backpack:GetChildren()) do
-			if t:IsA("Tool") then
-				table.insert(tools, t)
-			end
+			if t:IsA("Tool") then table.insert(tools, t) end
 		end
 	end
 	if char then
 		for _, t in ipairs(char:GetChildren()) do
-			if t:IsA("Tool") then
-				table.insert(tools, t)
-			end
+			if t:IsA("Tool") then table.insert(tools, t) end
 		end
 	end
 
@@ -205,7 +211,7 @@ local function refreshList()
 		c.Parent = btn
 
 		btn.MouseButton1Click:Connect(function()
-			selectedTool = tool
+			selectedToolName = tool.Name
 			dropBtn.Text = "Pilih: " .. tool.Name .. "  ▼"
 			itemList.Visible = false
 		end)
@@ -214,7 +220,6 @@ local function refreshList()
 	itemList.CanvasSize = UDim2.new(0, 0, 0, #tools * 36 + 8)
 end
 
--- Toggle dropdown
 dropBtn.MouseButton1Click:Connect(function()
 	itemList.Visible = not itemList.Visible
 	if itemList.Visible then
@@ -222,56 +227,49 @@ dropBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
--- Update status label
-local function updateStatus(locked, name)
-	isLocked = locked
-	if locked then
-		status.Text = "🔒 LOCKED: " .. (name or "?")
-		status.TextColor3 = Color3.fromRGB(0, 220, 120)
-	else
-		status.Text = "🔓 Unlocked"
-		status.TextColor3 = Color3.fromRGB(255, 255, 255)
+-- Tombol Lock
+lockBtn.MouseButton1Click:Connect(function()
+	if not selectedToolName then
+		status.Text = "Pilih item dulu!"
+		status.TextColor3 = Color3.fromRGB(255, 180, 80)
+		return
 	end
-end
-
--- ===== HUBUNG KE SERVER =====
-local lockEvent = ReplicatedStorage:FindFirstChild("ToolLockEvent")
-
-if not lockEvent then
-	status.Text = "⚠️ Warning: RemoteEvent tidak ada!"
-	status.TextColor3 = Color3.fromRGB(255, 100, 100)
-else
-	lockBtn.MouseButton1Click:Connect(function()
-		if isLocked then
-			status.Text = "Sudah terkunci!"
-			return
-		end
-		local toolName = selectedTool and selectedTool.Name or nil
-		if not toolName then
-			status.Text = "Pilih item dulu!"
-			status.TextColor3 = Color3.fromRGB(255, 180, 80)
-			return
-		end
-		lockEvent:FireServer("Lock", toolName)
-	end)
-
-	unlockBtn.MouseButton1Click:Connect(function()
-		if not isLocked then
-			status.Text = "Belum ada yang dikunci"
-			return
-		end
-		lockEvent:FireServer("Unlock")
-	end)
-
-	lockEvent.OnClientEvent:Connect(function(action, locked, toolName)
-		if action == "Status" then
-			updateStatus(locked, toolName)
+	
+	isLocked = true
+	updateStatus(true, selectedToolName)
+	
+	-- Loop pengaman lokal (memaksa equip tool terus jika tidak di tangan)
+	if lockConnection then lockConnection:Disconnect() end
+	lockConnection = game:GetService("RunService").Stepped:Connect(function()
+		if not isLocked or not selectedToolName then return end
+		local char = player.Character
+		if not char then return end
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		if not humanoid then return end
+		
+		local currentTool = char:FindFirstChild(selectedToolName)
+		if not currentTool then
+			local backpack = player:FindFirstChildOfClass("Backpack")
+			if backpack then
+				local tool = backpack:FindFirstChild(selectedToolName)
+				if tool and tool:IsA("Tool") then
+					pcall(function()
+						humanoid:EquipTool(tool)
+					end)
+				end
+			end
 		end
 	end)
+end)
 
-	pcall(function()
-		lockEvent:FireServer("CheckStatus")
-	end)
-end
+-- Tombol Unlock
+unlockBtn.MouseButton1Click:Connect(function()
+	isLocked = false
+	if lockConnection then
+		lockConnection:Disconnect()
+		lockConnection = nil
+	end
+	updateStatus(false, nil)
+end)
 
 updateStatus(false, nil)
