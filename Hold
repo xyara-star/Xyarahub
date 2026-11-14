@@ -1,22 +1,46 @@
--- Tool Lock Pro - Auto Reconnect & Relock (Delta Executor)
+--[[
+    Tool Lock Pro v2 - Fixed
+    - Listener Unequipped (tanpa delay)
+    - Simpan referensi tool, bukan nama
+    - Auto re-hook saat respawn
+    - Deteksi tool hilang / dijual
+    - Toggle ON/OFF
+]]
+
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local player = Players.LocalPlayer
 
--- Hapus GUI lama jika ada
-if CoreGui:FindFirstChild("SimpleToolLock") then
-	CoreGui.SimpleToolLock:Destroy()
+-- ===== HAPUS GUI LAMA =====
+local old = CoreGui:FindFirstChild("SimpleToolLock")
+if old then old:Destroy() end
+
+-- ===== STATE =====
+local isLocked = false
+local lockedTool = nil
+local conns = {}
+
+local function clearConns()
+    for _, c in ipairs(conns) do
+        pcall(function() c:Disconnect() end)
+    end
+    conns = {}
 end
 
--- ===== BUAT UI SIMPEL =====
+local function addConn(c)
+    if c then table.insert(conns, c) end
+end
+
+-- ===== UI =====
 local gui = Instance.new("ScreenGui")
 gui.Name = "SimpleToolLock"
 gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = CoreGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 180, 0, 110)
-frame.Position = UDim2.new(0, 30, 0.5, -55)
+frame.Size = UDim2.new(0, 200, 0, 120)
+frame.Position = UDim2.new(0, 30, 0.5, -60)
 frame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 frame.BorderSizePixel = 0
 frame.Active = true
@@ -27,15 +51,21 @@ local corner = Instance.new("UICorner")
 corner.CornerRadius = UDim.new(0, 8)
 corner.Parent = frame
 
--- Status Label
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(70, 70, 90)
+stroke.Thickness = 2
+stroke.Parent = frame
+
+-- Status
 local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(1, -16, 0, 32)
+statusLabel.Size = UDim2.new(1, -16, 0, 34)
 statusLabel.Position = UDim2.new(0, 8, 0, 8)
 statusLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
 statusLabel.Text = "Status: Unlocked"
 statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 statusLabel.Font = Enum.Font.GothamBold
 statusLabel.TextSize = 12
+statusLabel.TextWrapped = true
 statusLabel.Parent = frame
 
 local labelCorner = Instance.new("UICorner")
@@ -44,8 +74,8 @@ labelCorner.Parent = statusLabel
 
 -- Tombol Lock
 local lockBtn = Instance.new("TextButton")
-lockBtn.Size = UDim2.new(0, 78, 0, 32)
-lockBtn.Position = UDim2.new(0, 8, 0, 48)
+lockBtn.Size = UDim2.new(0, 88, 0, 36)
+lockBtn.Position = UDim2.new(0, 8, 0, 52)
 lockBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 90)
 lockBtn.Text = "LOCK"
 lockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -59,8 +89,8 @@ lockCorner.Parent = lockBtn
 
 -- Tombol Unlock
 local unlockBtn = Instance.new("TextButton")
-unlockBtn.Size = UDim2.new(0, 78, 0, 32)
-unlockBtn.Position = UDim2.new(1, -86, 0, 48)
+unlockBtn.Size = UDim2.new(0, 88, 0, 36)
+unlockBtn.Position = UDim2.new(1, -96, 0, 52)
 unlockBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 unlockBtn.Text = "UNLOCK"
 unlockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -72,98 +102,116 @@ local unlockCorner = Instance.new("UICorner")
 unlockCorner.CornerRadius = UDim.new(0, 6)
 unlockCorner.Parent = unlockBtn
 
--- ===== LOGIKA PENGUNCIAN UTAMA =====
-local lockedToolName = nil
-local isLocked = false
-local connections = {}
+-- ===== LOGIKA =====
 
-local function clearConnections()
-	for _, conn in ipairs(connections) do
-		conn:Disconnect()
-	end
-	connections = {}
+local function setStatus(text, color)
+    statusLabel.Text = text
+    statusLabel.TextColor3 = color or Color3.fromRGB(255, 255, 255)
 end
 
-local function forceEquip()
-	if not isLocked or not lockedToolName then return end
-	
-	task.delay(0.5, function() -- Jeda 0.5 detik untuk memberi waktu game selesai proses jual/reset
-		if not isLocked then return end
-		local char = player.Character
-		if not char then return end
-		local humanoid = char:FindFirstChildOfClass("Humanoid")
-		if not humanoid then return end
-		
-		-- Cek apakah sudah di tangan
-		if char:FindFirstChild(lockedToolName) then return end
-		
-		-- Cari di backpack
-		local backpack = player:FindFirstChildOfClass("Backpack")
-		if backpack then
-			local tool = backpack:FindFirstChild(lockedToolName)
-			if tool and tool:IsA("Tool") then
-				pcall(function()
-					humanoid:EquipTool(tool)
-				end)
-			end
-		end
-	end)
+-- Coba equip tool terkunci kalau sedang tidak di tangan
+local function tryEquip()
+    if not isLocked or not lockedTool then return end
+    if not lockedTool.Parent then return end -- tool sudah dihapus / terjual
+
+    local char = player.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+
+    if lockedTool.Parent == char then return end -- sudah di tangan
+    pcall(function()
+        hum:EquipTool(lockedTool)
+    end)
 end
 
+-- Pasang listener di tool terkunci
+local function hookTool(tool)
+    if not tool then return end
+
+    -- Listener utama: begitu tool dilepas, langsung re-equip (tanpa delay)
+    addConn(tool.Unequipped:Connect(function()
+        if isLocked and lockedTool == tool then
+            task.defer(tryEquip)
+        end
+    end))
+
+    -- Kalau tool dihapus dari game (terjual / hancur), matikan lock
+    addConn(tool.AncestryChanged:Connect(function()
+        if isLocked and lockedTool == tool and not tool.Parent then
+            isLocked = false
+            lockedTool = nil
+            clearConns()
+            setStatus("Status: Item hilang, unlock", Color3.fromRGB(255, 180, 80))
+        end
+    end))
+end
+
+-- Hook karakter (untuk respawn)
 local function hookCharacter(char)
-	-- Pantau jika tool dilepas dari tangan
-	local childRemovedConn = char.ChildRemoved:Connect(function(child)
-		if isLocked and child.Name == lockedToolName and child:IsA("Tool") then
-			forceEquip()
-		end
-	end)
-	table.insert(connections, childRemovedConn)
+    if not char then return end
+
+    -- Pantau kalau tool terkunci entah kenapa pindah keluar dari character
+    addConn(char.ChildRemoved:Connect(function(child)
+        if isLocked and child == lockedTool then
+            task.defer(tryEquip)
+        end
+    end))
 end
 
--- Tombol LOCK
+-- ===== TOMBOL LOCK =====
 lockBtn.MouseButton1Click:Connect(function()
-	local char = player.Character
-	if not char then return end
-	
-	local currentTool = char:FindFirstChildOfClass("Tool")
-	if not currentTool then
-		statusLabel.Text = "Pegang item dulu!"
-		statusLabel.TextColor3 = Color3.fromRGB(255, 180, 80)
-		return
-	end
-	
-	lockedToolName = currentTool.Name
-	isLocked = true
-	statusLabel.Text = "Locked: " .. lockedToolName
-	statusLabel.TextColor3 = Color3.fromRGB(0, 255, 120)
-	
-	clearConnections()
-	hookCharacter(char)
-	
-	-- Pantau jika karakter respawn/mati
-	local charAddedConn = player.CharacterAdded:Connect(function(newChar)
-		hookCharacter(newChar)
-		forceEquip()
-	end)
-	table.insert(connections, charAddedConn)
-	
-	-- Pantau juga jika item masuk kembali ke backpack (setelah transaksi sell)
-	local backpack = player:FindFirstChildOfClass("Backpack")
-	if backpack then
-		local bpConn = backpack.ChildAdded:Connect(function(child)
-			if isLocked and child.Name == lockedToolName then
-				forceEquip()
-			end
-		end)
-		table.insert(connections, bpConn)
-	end
+    local char = player.Character
+    if not char then return end
+
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool then
+        setStatus("Pegang item dulu!", Color3.fromRGB(255, 180, 80))
+        return
+    end
+
+    -- Reset koneksi lama
+    clearConns()
+
+    isLocked = true
+    lockedTool = tool
+
+    hookTool(tool)
+    hookCharacter(char)
+
+    setStatus("Locked: " .. tool.Name, Color3.fromRGB(0, 220, 120))
+
+    -- Paksa langsung di tangan (jaga-jaga)
+    tryEquip()
 end)
 
--- Tombol UNLOCK
+-- ===== TOMBOL UNLOCK =====
 unlockBtn.MouseButton1Click:Connect(function()
-	isLocked = false
-	lockedToolName = nil
-	clearConnections()
-	statusLabel.Text = "Status: Unlocked"
-	statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    isLocked = false
+    lockedTool = nil
+    clearConns()
+    setStatus("Status: Unlocked", Color3.fromRGB(255, 255, 255))
 end)
+
+-- ===== AUTO RE-HOOK SAAT RESPAWN =====
+player.CharacterAdded:Connect(function(newChar)
+    task.wait(0.5) -- tunggu tool masuk ke backpack
+    if not isLocked or not lockedTool then return end
+
+    -- Tool biasanya dikembalikan ke backpack saat respawn
+    local backpack = player:FindFirstChildOfClass("Backpack")
+    if backpack and lockedTool.Parent == backpack then
+        local hum = newChar:FindFirstChildOfClass("Humanoid")
+        if hum then
+            pcall(function()
+                hum:EquipTool(lockedTool)
+            end)
+        end
+    end
+
+    hookCharacter(newChar)
+end)
+
+-- ===== INIT =====
+setStatus("Status: Unlocked")
+print("[Tool Lock Pro v2] Loaded")
